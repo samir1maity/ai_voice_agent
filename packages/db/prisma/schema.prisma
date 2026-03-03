@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum CandidateStatus {
+  PENDING
+  SCHEDULED
+  CALLED
+  QUALIFIED
+  DISQUALIFIED
+  NO_ANSWER
+}
+
+enum CallStatus {
+  INITIATED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  NO_ANSWER
+}
+
+enum AgentStatus {
+  ACTIVE
+  INACTIVE
+  SYNCING
+}
+
+// ─── MODELS ───────────────────────────────────────────────────────────────────
+
+model Agent {
+  id           String      @id @default(cuid())
+  name         String
+  description  String?
+  bolnaAgentId String?     @unique
+  status       AgentStatus @default(SYNCING)
+  prompt       String      @db.Text
+  voice        String      @default("FaqthkZu1EWxXxUFbAfb")
+  model        String      @default("gpt-4o-mini")
+  maxDuration  Int         @default(600)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  calls Call[]
+
+  @@map("agents")
+}
+
+model Candidate {
+  id                String          @id @default(cuid())
+  name              String
+  phone             String          @unique
+  email             String?         @unique
+  currentRole       String?
+  yearsOfExperience Int?
+  resumeUrl         String?
+  status            CandidateStatus @default(PENDING)
+  timezone          String          @default("Asia/Kolkata")
+  notes             String?         @db.Text
+  importBatchId     String?
+  latestScore       Int?
+  latestSummary     String?         @db.Text
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  calls         Call[]
+  callAnalytics CallAnalytic[]
+
+  @@index([status])
+  @@index([importBatchId])
+  @@map("candidates")
+}
+
+model Call {
+  id                   String     @id @default(cuid())
+  bolnaExecutionId     String?    @unique
+  agentId              String
+  candidateId          String
+  status               CallStatus @default(INITIATED)
+  transcript           String?    @db.Text
+  summary              String?    @db.Text
+  duration             Float?
+  cost                 Float?
+  agentPhoneNumber     String?
+  candidatePhoneNumber String?
+  callType             String?    @default("outbound")
+  provider             String?
+  initiatedAt          DateTime   @default(now())
+  completedAt          DateTime?
+  rawWebhookPayload    Json?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  agent     Agent     @relation(fields: [agentId], references: [id])
+  candidate Candidate @relation(fields: [candidateId], references: [id])
+  analytics CallAnalytic?
+
+  @@index([candidateId])
+  @@index([agentId])
+  @@index([status])
+  @@index([bolnaExecutionId])
+  @@map("calls")
+}
+
+model CallAnalytic {
+  id                   String   @id @default(cuid())
+  callId               String   @unique
+  candidateId          String
+  overallScore         Int?
+  isQualified          Boolean?
+  reason               String?  @db.Text
+  detectedTechStack    String[]
+  extractedYearsExp    Int?
+  extractedCurrentRole String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  call      Call      @relation(fields: [callId], references: [id])
+  candidate Candidate @relation(fields: [candidateId], references: [id])
+
+  @@index([candidateId])
+  @@index([isQualified])
+  @@map("call_analytics")
+}
+
+model ImportBatch {
+  id           String   @id @default(cuid())
+  filename     String
+  totalRecords Int
+  imported     Int      @default(0)
+  failed       Int      @default(0)
+  status       String   @default("processing")
+  errors       Json?
+  createdAt    DateTime @default(now())
+
+  @@map("import_batches")
+}

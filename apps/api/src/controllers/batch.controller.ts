@@ -1,0 +1,77 @@
+import { Request, Response, NextFunction } from 'express'
+import { prisma } from '@ai-voice-agent/db'
+import { bolnaService } from '../services/bolna.service'
+import { AppError } from '../middleware/error.middleware'
+
+export const batchController = {
+  async initiateCalls(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { candidateIds, agentId } = req.body
+
+      const agent = await prisma.agent.findUnique({ where: { id: agentId } })
+      if (!agent) throw new AppError(404, 'Agent not found')
+      if (!agent.bolnaAgentId) throw new AppError(400, 'Agent is not synced with Bolna. Please sync first.')
+
+      const candidates = await prisma.candidate.findMany({
+        where: { id: { in: candidateIds } },
+      })
+
+      if (candidates.length === 0) throw new AppError(404, 'No candidates found')
+
+      const results = { total: candidates.length, initiated: 0, failed: 0, callIds: [] as string[] }
+
+      // Process candidates with a delay to avoid rate limiting
+      for (const candidate of candidates) {
+        try {
+          const call = await prisma.call.create({
+            data: {
+              agentId,
+              candidateId: candidate.id,
+              status: 'INITIATED',
+              candidatePhoneNumber: candidate.phone,
+              callType: 'outbound',
+              initiatedAt: new Date(),
+            },
+          })
+
+          await prisma.candidate.update({
+            where: { id: candidate.id },
+            data: { status: 'SCHEDULED' },
+          })
+
+          try {
+            const bolnaRes = await bolnaService.initiateCall({
+              agent_id: agent.bolnaAgentId!,
+              recipient_phone_number: candidate.phone,
+              recipient_data: { name: candidate.name, timezone: candidate.timezone },
+            })
+
+            const executionId = bolnaRes.execution_id || bolnaRes.call_id
+
+            await prisma.call.update({
+              where: { id: call.id },
+              data: { bolnaExecutionId: executionId, status: 'IN_PROGRESS' },
+            })
+
+            results.initiated++
+            results.callIds.push(call.id)
+          } catch {
+            await prisma.call.update({ where: { id: call.id }, data: { status: 'FAILED' } })
+            await prisma.candidate.update({ where: { id: candidate.id }, data: { status: 'PENDING' } })
+            results.failed++
+          }
+
+          // Rate limit: 1 second between calls
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        } catch (err) {
+          console.error(`[Batch] Failed for candidate ${candidate.id}:`, err)
+          results.failed++
+        }
+      }
+
+      res.status(201).json({ success: true, data: results })
+    } catch (err) {
+      next(err)
+    }
+  },
+}
