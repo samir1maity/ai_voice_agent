@@ -5,6 +5,43 @@ import { screeningService } from '../services/screening.service'
 import { AppError } from '../middleware/error.middleware'
 import type { ScreeningReport } from '@ai-voice-agent/types'
 
+async function runPostCallProcessing(callId: string, candidateId: string, transcript: string, summary: string | null) {
+  const analysis = await screeningService.analyze(transcript, summary || '')
+
+  await prisma.callAnalytic.upsert({
+    where: { callId },
+    update: {
+      overallScore: analysis.overallScore,
+      isQualified: analysis.isQualified,
+      reason: analysis.reason,
+      detectedTechStack: analysis.detectedTechStack,
+      extractedYearsExp: analysis.extractedYearsExp,
+      extractedCurrentRole: analysis.extractedCurrentRole,
+    },
+    create: {
+      callId,
+      candidateId,
+      overallScore: analysis.overallScore,
+      isQualified: analysis.isQualified,
+      reason: analysis.reason,
+      detectedTechStack: analysis.detectedTechStack,
+      extractedYearsExp: analysis.extractedYearsExp,
+      extractedCurrentRole: analysis.extractedCurrentRole,
+    },
+  })
+
+  await prisma.candidate.update({
+    where: { id: candidateId },
+    data: {
+      status: analysis.isQualified ? 'QUALIFIED' : 'DISQUALIFIED',
+      latestScore: analysis.overallScore,
+      latestSummary: summary || undefined,
+    },
+  })
+
+  console.log(`[Calls] Scoring done for call ${callId}: score=${analysis.overallScore}, qualified=${analysis.isQualified}`)
+}
+
 export const callsController = {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
@@ -121,13 +158,55 @@ export const callsController = {
       })
       if (!call) throw new AppError(404, 'Call not found')
 
-      if (call.status === 'IN_PROGRESS' && call.bolnaExecutionId) {
+      if (call.bolnaExecutionId) {
         try {
           const bolnaData = await bolnaService.getExecution(call.bolnaExecutionId)
-          if ((bolnaData.status as string) === 'call-disconnected') {
-            await prisma.call.update({ where: { id: call.id }, data: { status: 'COMPLETED' } })
-            return res.json({ success: true, data: { ...call, status: 'COMPLETED' } })
+          const bolnaStatus = (bolnaData.status as string)?.toLowerCase()
+
+          const isCompleted = bolnaStatus === 'completed' || bolnaStatus === 'call-disconnected'
+          const isFailed = bolnaStatus === 'failed' || bolnaStatus === 'call-failed' || !!(bolnaData.error_message)
+          const isNoAnswer =
+            bolnaStatus === 'no-answer' ||
+            bolnaStatus === 'busy' ||
+            bolnaStatus === 'canceled' ||
+            bolnaStatus === 'balance-low'
+
+          const mappedStatus = isCompleted
+            ? 'COMPLETED'
+            : isFailed
+              ? 'FAILED'
+              : isNoAnswer
+                ? 'NO_ANSWER'
+                : call.status === 'INITIATED'
+                  ? 'IN_PROGRESS'
+                  : call.status
+
+          const transcript = (bolnaData.transcript as string) || undefined
+          const summary = (bolnaData.summary as string) || null
+
+          const updated = await prisma.call.update({
+            where: { id: call.id },
+            data: {
+              status: mappedStatus,
+              transcript: transcript || undefined,
+              summary: summary || undefined,
+              duration: (bolnaData.conversation_duration as number) || undefined,
+              cost: (bolnaData.total_cost as number) || undefined,
+              completedAt: isCompleted ? new Date() : undefined,
+            },
+            select: { id: true, status: true, bolnaExecutionId: true, duration: true, completedAt: true, candidateId: true },
+          })
+
+          if (isCompleted && transcript) {
+            await runPostCallProcessing(call.id, updated.candidateId, transcript, summary)
+          } else if (isFailed || isNoAnswer) {
+            await prisma.candidate.update({
+              where: { id: updated.candidateId },
+              data: { status: 'NO_ANSWER' },
+            })
           }
+
+          return res.json({ success: true, data: updated })
         } catch {
           // ignore polling errors; return local status
         }
@@ -163,39 +242,9 @@ export const callsController = {
       if (!call) throw new AppError(404, 'Call not found')
       if (!call.transcript) throw new AppError(400, 'Call has no transcript to analyze')
 
-      const analysis = await screeningService.analyze(call.transcript, call.summary || '')
+      await runPostCallProcessing(call.id, call.candidateId, call.transcript, call.summary)
 
-      const analytics = await prisma.callAnalytic.upsert({
-        where: { callId: call.id },
-        update: {
-          overallScore: analysis.overallScore,
-          isQualified: analysis.isQualified,
-          reason: analysis.reason,
-          detectedTechStack: analysis.detectedTechStack,
-          extractedYearsExp: analysis.extractedYearsExp,
-          extractedCurrentRole: analysis.extractedCurrentRole,
-        },
-        create: {
-          callId: call.id,
-          candidateId: call.candidateId,
-          overallScore: analysis.overallScore,
-          isQualified: analysis.isQualified,
-          reason: analysis.reason,
-          detectedTechStack: analysis.detectedTechStack,
-          extractedYearsExp: analysis.extractedYearsExp,
-          extractedCurrentRole: analysis.extractedCurrentRole,
-        },
-      })
-
-      await prisma.candidate.update({
-        where: { id: call.candidateId },
-        data: {
-          status: analysis.isQualified ? 'QUALIFIED' : 'DISQUALIFIED',
-          latestScore: analysis.overallScore,
-          latestSummary: call.summary,
-        },
-      })
-
+      const analytics = await prisma.callAnalytic.findUnique({ where: { callId: call.id } })
       res.json({ success: true, data: analytics })
     } catch (err) {
       next(err)

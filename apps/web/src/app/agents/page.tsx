@@ -2,11 +2,12 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { Plus, RefreshCw, Pencil, Trash2, Bot } from 'lucide-react'
+import { RefreshCw, Pencil, Trash2, Bot } from 'lucide-react'
 import { DashboardLayout } from '@/app/dashboard-layout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { agentsApi } from '@/lib/api-client'
@@ -110,22 +111,33 @@ function AgentCard({ agent }: { agent: Agent }) {
         </div>
 
         <div className="flex gap-2 pt-1">
-          <Link href={`/agents/${agent.id}`} className="flex-1">
+          {/* <Link href={`/agents/${agent.id}`} className="flex-1">
             <Button variant="outline" size="sm" className="w-full gap-1.5">
               <Pencil className="h-3.5 w-3.5" />
               Edit
             </Button>
-          </Link>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-            Sync
-          </Button>
+          </Link> */}
+          <TooltipProvider delayDuration={120}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => syncMutation.mutate()}
+                    disabled={syncMutation.isPending}
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                    Sync
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Fetch latest agent config from Bolna and update this agent in your DB.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button
             variant="outline"
             size="sm"
@@ -142,9 +154,24 @@ function AgentCard({ agent }: { agent: Agent }) {
 }
 
 export default function AgentsPage() {
+  const queryClient = useQueryClient()
   const { data: agents, isLoading, error } = useQuery<Agent[]>({
     queryKey: ['agents'],
     queryFn: () => agentsApi.list(),
+  })
+
+  const fetchAllMutation = useMutation({
+    mutationFn: () => agentsApi.fetchAll() as Promise<{ total: number; imported: number; skipped: number }>,
+    onSuccess: (result) => {
+      toast({
+        title: 'Agents fetched',
+        description: `Imported ${result.imported}, skipped ${result.skipped}.`,
+      })
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Fetch failed', description: err.message, variant: 'destructive' })
+    },
   })
 
   return (
@@ -155,12 +182,21 @@ export default function AgentsPage() {
             <h1 className="text-2xl font-bold text-gray-900">AI Agents</h1>
             <p className="text-sm text-gray-500">Manage your Bolna voice AI screening agents</p>
           </div>
-          <Link href="/agents/new">
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Create Agent
-            </Button>
-          </Link>
+          <TooltipProvider delayDuration={120}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <Button className="gap-2" onClick={() => fetchAllMutation.mutate()} disabled={fetchAllMutation.isPending}>
+                    <RefreshCw className={`h-4 w-4 ${fetchAllMutation.isPending ? 'animate-spin' : ''}`} />
+                    Fetch All Agents
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                Import agents from Bolna that are not already in your DB.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {isLoading && <LoadingSpinner />}
@@ -175,14 +211,12 @@ export default function AgentsPage() {
           <EmptyState
             icon={Bot}
             title="No agents yet"
-            description="Create your first AI screening agent to start conducting automated phone interviews."
+            description="Fetch your agents from Bolna to start conducting automated phone interviews."
             action={
-              <Link href="/agents/new">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Agent
-                </Button>
-              </Link>
+              <Button onClick={() => fetchAllMutation.mutate()} disabled={fetchAllMutation.isPending}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${fetchAllMutation.isPending ? 'animate-spin' : ''}`} />
+                Fetch All Agents
+              </Button>
             }
           />
         )}

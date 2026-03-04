@@ -7,6 +7,7 @@ const router = Router()
 
 router.get('/', agentsController.list)
 router.post('/', validate(createAgentSchema), agentsController.create)
+router.post('/fetch-all', agentsController.fetchAll)
 router.get('/:id', agentsController.get)
 router.put('/:id', validate(updateAgentSchema), agentsController.update)
 router.delete('/:id', agentsController.delete)

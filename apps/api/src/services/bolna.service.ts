@@ -65,7 +65,8 @@ class BolnaService {
   }
 
   async getExecution(executionId: string): Promise<Record<string, unknown>> {
-    const response = await this.client.get(`/v2/execution/${executionId}`)
+    const response = await this.client.get(`/executions/${executionId}`)
+    console.log('response.data', response.data)
     return response.data
   }
 

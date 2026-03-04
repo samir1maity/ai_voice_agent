@@ -20,6 +20,16 @@ export function useCallPolling(
   const [isPolling, setIsPolling] = useState(
     !TERMINAL_STATUSES.includes(initialStatus)
   )
+
+  // Sync when the real data arrives (initialStatus changes from undefined/'INITIATED' to actual)
+  useEffect(() => {
+    setStatus((prev) => {
+      if (TERMINAL_STATUSES.includes(initialStatus) && !TERMINAL_STATUSES.includes(prev)) {
+        return initialStatus
+      }
+      return prev
+    })
+  }, [initialStatus])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onCompleteRef = useRef(onComplete)
 

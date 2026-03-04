@@ -17,7 +17,7 @@ const nav = [
   { href: '/agents', label: 'Agents', icon: Bot },
   { href: '/candidates', label: 'Candidates', icon: Users },
   { href: '/calls', label: 'Call History', icon: Phone },
-  { href: '/batch', label: 'Batch Calls', icon: ListChecks },
+  // { href: '/batch', label: 'Batch Calls', icon: ListChecks },
 ]
 
 export function Sidebar() {

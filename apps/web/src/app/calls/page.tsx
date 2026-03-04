@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import Link from 'next/link'
-import { PhoneCall, ChevronLeft, ChevronRight } from 'lucide-react'
+import { PhoneCall, ChevronLeft, ChevronRight, Volume2 } from 'lucide-react'
 import { DashboardLayout } from '@/app/dashboard-layout'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -21,24 +20,21 @@ import { callsApi } from '@/lib/api-client'
 
 interface Call {
   id: string
-  candidateName?: string
-  agentName?: string
   status: string
-  durationSeconds?: number
+  duration?: number
   cost?: number
-  overallScore?: number | null
-  isQualified?: boolean | null
   createdAt: string
+  candidate?: { id: string; name: string; phone: string }
+  agent?: { id: string; name: string }
+  recordingUrl?: string | null
 }
 
 interface CallsResponse {
   data: Call[]
-  meta: {
-    total: number
-    page: number
-    limit: number
-    totalPages: number
-  }
+  total: number
+  page: number
+  limit: number
+  totalPages: number
 }
 
 const STATUS_OPTIONS = [
@@ -95,7 +91,7 @@ export default function CallsPage() {
   })
 
   const calls = data?.data ?? []
-  const meta = data?.meta
+  const meta = data ? { total: data.total, page: data.page, limit: data.limit, totalPages: data.totalPages } : undefined
 
   const handleStatusChange = (val: string) => {
     setStatus(val)
@@ -172,8 +168,7 @@ export default function CallsPage() {
                       <th className="px-6 py-3 font-medium text-gray-500">Status</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Duration</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Cost</th>
-                      <th className="px-6 py-3 font-medium text-gray-500">Score</th>
-                      <th className="px-6 py-3 font-medium text-gray-500">Qualified</th>
+                      <th className="px-6 py-3 font-medium text-gray-500">Recording</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Date</th>
                     </tr>
                   </thead>
@@ -185,47 +180,34 @@ export default function CallsPage() {
                         onClick={() => (window.location.href = `/calls/${call.id}`)}
                       >
                         <td className="px-6 py-3 font-medium text-gray-900">
-                          {call.candidateName ?? '—'}
+                          {call.candidate?.name ?? '—'}
                         </td>
                         <td className="px-6 py-3 text-gray-600">
-                          {call.agentName ?? '—'}
+                          {call.agent?.name ?? '—'}
                         </td>
                         <td className="px-6 py-3">
                           <CallStatusBadge status={call.status} />
                         </td>
                         <td className="px-6 py-3 text-gray-600">
-                          {formatDuration(call.durationSeconds)}
+                          {formatDuration(call.duration)}
                         </td>
                         <td className="px-6 py-3 text-gray-600">
                           {formatCost(call.cost)}
                         </td>
-                        <td className="px-6 py-3">
-                          {call.overallScore != null ? (
-                            <span
-                              className={`font-semibold ${
-                                call.overallScore >= 70
-                                  ? 'text-emerald-600'
-                                  : call.overallScore >= 50
-                                  ? 'text-yellow-600'
-                                  : 'text-red-600'
-                              }`}
+                        <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
+                          {call.recordingUrl ? (
+                            <a
+                              href={call.recordingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center rounded-md p-1.5 text-blue-600 hover:bg-blue-50"
+                              title="Play recording"
                             >
-                              {call.overallScore}
-                            </span>
+                              <Volume2 className="h-4 w-4" />
+                            </a>
                           ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-3">
-                          {call.isQualified == null ? (
-                            <span className="text-gray-400">—</span>
-                          ) : call.isQualified ? (
-                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                              Yes
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                              No
+                            <span className="text-gray-300">
+                              <Volume2 className="h-4 w-4" />
                             </span>
                           )}
                         </td>

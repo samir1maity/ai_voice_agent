@@ -29,20 +29,19 @@ interface CallDetail {
   id: string
   status: string
   candidateId?: string
-  candidateName?: string
-  candidatePhone?: string
-  agentName?: string
-  durationSeconds?: number
+  duration?: number
   cost?: number
-  overallScore?: number | null
-  technicalScore?: number | null
-  experienceScore?: number | null
-  communicationScore?: number | null
-  isQualified?: boolean | null
   summary?: string | null
-  techStack?: string[]
   transcript?: string | null
   createdAt: string
+  candidate?: { id: string; name: string; phone: string }
+  agent?: { id: string; name: string }
+  analytics?: {
+    overallScore?: number | null
+    isQualified?: boolean | null
+    reason?: string | null
+    detectedTechStack?: string[]
+  } | null
 }
 
 interface PageProps {
@@ -162,17 +161,17 @@ export default function CallDetailPage({ params }: PageProps) {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">
-                  {call.candidateName ?? 'Unknown Candidate'}
+                  {call.candidate?.name ?? 'Unknown Candidate'}
                 </h1>
                 <CallStatusBadge status={displayStatus} />
                 {isPolling && <PollingIndicator />}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                {call.candidatePhone && (
-                  <MetaItem icon={Phone} label="Phone" value={call.candidatePhone} />
+                {call.candidate?.phone && (
+                  <MetaItem icon={Phone} label="Phone" value={call.candidate.phone} />
                 )}
                 <MetaItem icon={Calendar} label="Date" value={formatDate(call.createdAt)} />
-                <MetaItem icon={Clock} label="Duration" value={formatDuration(call.durationSeconds)} />
+                <MetaItem icon={Clock} label="Duration" value={formatDuration(call.duration)} />
                 <MetaItem icon={DollarSign} label="Cost" value={formatCost(call.cost)} />
               </div>
             </div>
@@ -205,15 +204,15 @@ export default function CallDetailPage({ params }: PageProps) {
         </div>
 
         {/* Candidate Link */}
-        {call.candidateId && (
+        {call.candidate && (
           <div className="flex items-center gap-2 rounded-lg border bg-gray-50 px-4 py-3 text-sm">
             <User className="h-4 w-4 text-gray-400" />
             <span className="text-gray-500">Candidate profile:</span>
             <Link
-              href={`/candidates/${call.candidateId}`}
+              href={`/candidates/${call.candidate.id}`}
               className="font-medium text-blue-600 hover:underline"
             >
-              {call.candidateName}
+              {call.candidate.name}
             </Link>
           </div>
         )}
@@ -227,22 +226,22 @@ export default function CallDetailPage({ params }: PageProps) {
               </CardHeader>
               <CardContent>
                 <ScreeningScore
-                  overallScore={call.overallScore}
-                  technicalScore={call.technicalScore}
-                  experienceScore={call.experienceScore}
-                  communicationScore={call.communicationScore}
-                  isQualified={call.isQualified}
+                  overallScore={call.analytics?.overallScore}
+                  technicalScore={null}
+                  experienceScore={null}
+                  communicationScore={null}
+                  isQualified={call.analytics?.isQualified}
                 />
               </CardContent>
             </Card>
 
-            {call.techStack && call.techStack.length > 0 && (
+            {call.analytics?.detectedTechStack && call.analytics.detectedTechStack.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Detected Tech Stack</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <TechStackTags techStack={call.techStack} />
+                  <TechStackTags techStack={call.analytics.detectedTechStack} />
                 </CardContent>
               </Card>
             )}

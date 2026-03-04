@@ -180,12 +180,12 @@ export default function DashboardPage() {
                 icon={Clock}
                 color="bg-purple-500"
               />
-              <StatCard
+              {/* <StatCard
                 title="Total Cost"
                 value={`$${(stats?.totalCost ?? 0).toFixed(2)}`}
                 icon={DollarSign}
                 color="bg-orange-500"
-              />
+              /> */}
               <StatCard
                 title="Calls Today"
                 value={stats?.callsToday ?? 0}

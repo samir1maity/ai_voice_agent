@@ -21,6 +21,7 @@ export const agentsApi = {
   list: () => apiClient.get('/agents').then((r) => r.data.data),
   get: (id: string) => apiClient.get(`/agents/${id}`).then((r) => r.data.data),
   create: (data: unknown) => apiClient.post('/agents', data).then((r) => r.data.data),
+  fetchAll: () => apiClient.post('/agents/fetch-all').then((r) => r.data.data),
   update: (id: string, data: unknown) => apiClient.put(`/agents/${id}`, data).then((r) => r.data.data),
   delete: (id: string) => apiClient.delete(`/agents/${id}`).then((r) => r.data),
   sync: (id: string) => apiClient.post(`/agents/${id}/sync`).then((r) => r.data.data),

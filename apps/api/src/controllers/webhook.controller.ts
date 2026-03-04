@@ -18,9 +18,26 @@ export const webhookController = {
 
       console.log(`[Webhook] Received execution: ${payload.id}, status: ${payload.status}`)
 
-      const isDisconnected = payload.status === 'call-disconnected'
-      const isFailed = payload.status === 'call-failed' || !!payload.error_message
-      const callStatus = isDisconnected ? 'COMPLETED' : isFailed ? 'FAILED' : 'IN_PROGRESS'
+      const bolnaStatus = payload.status?.toLowerCase()
+
+      const isCompleted = bolnaStatus === 'completed' || bolnaStatus === 'call-disconnected'
+      const isFailed =
+        bolnaStatus === 'failed' ||
+        bolnaStatus === 'call-failed' ||
+        !!payload.error_message
+      const isNoAnswer =
+        bolnaStatus === 'no-answer' ||
+        bolnaStatus === 'busy' ||
+        bolnaStatus === 'canceled' ||
+        bolnaStatus === 'balance-low'
+
+      const callStatus = isCompleted
+        ? 'COMPLETED'
+        : isFailed
+          ? 'FAILED'
+          : isNoAnswer
+            ? 'NO_ANSWER'
+            : 'IN_PROGRESS'
 
       // Find existing call
       let call = await prisma.call.findFirst({ where: { bolnaExecutionId: payload.id } })
@@ -34,7 +51,11 @@ export const webhookController = {
             summary: payload.summary || undefined,
             duration: payload.conversation_duration || undefined,
             cost: payload.total_cost || undefined,
-            completedAt: isDisconnected ? new Date() : undefined,
+            completedAt: isCompleted ? new Date() : undefined,
+            recordingUrl: payload.telephony_data?.recording_url || undefined,
+            agentPhoneNumber: payload.telephony_data?.from_number || undefined,
+            candidatePhoneNumber: payload.telephony_data?.to_number || undefined,
+            rawWebhookPayload: payload as object,
           },
         })
       } else {
@@ -60,7 +81,11 @@ export const webhookController = {
                 summary: payload.summary || undefined,
                 duration: payload.conversation_duration || undefined,
                 cost: payload.total_cost || undefined,
-                completedAt: isDisconnected ? new Date() : undefined,
+                completedAt: isCompleted ? new Date() : undefined,
+                recordingUrl: payload.telephony_data?.recording_url || undefined,
+                agentPhoneNumber: payload.telephony_data?.from_number || undefined,
+                candidatePhoneNumber: payload.telephony_data?.to_number || undefined,
+                rawWebhookPayload: payload as object,
               },
             })
           }
@@ -72,7 +97,7 @@ export const webhookController = {
         return
       }
 
-      if (isDisconnected && payload.transcript) {
+      if (isCompleted && payload.transcript) {
         const analysis = await screeningService.analyze(payload.transcript, payload.summary || '')
 
         await prisma.callAnalytic.upsert({

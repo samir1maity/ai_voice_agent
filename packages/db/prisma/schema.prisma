@@ -89,6 +89,7 @@ model Call {
   cost                 Float?
   agentPhoneNumber     String?
   candidatePhoneNumber String?
+  recordingUrl         String?
   callType             String?    @default("outbound")
   provider             String?
   initiatedAt          DateTime   @default(now())

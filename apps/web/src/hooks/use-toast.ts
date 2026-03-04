@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 interface Toast {
   id: string
@@ -9,12 +9,12 @@ interface Toast {
   variant?: 'default' | 'destructive'
 }
 
-let toastHandlers: ((toast: Toast) => void)[] = []
+const toastHandlers = new Set<(toast: Toast) => void>()
 
 function addToastHandler(handler: (toast: Toast) => void) {
-  toastHandlers.push(handler)
+  toastHandlers.add(handler)
   return () => {
-    toastHandlers = toastHandlers.filter((h) => h !== handler)
+    toastHandlers.delete(handler)
   }
 }
 
@@ -28,16 +28,18 @@ export function toast(options: Omit<Toast, 'id'>) {
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  // Register handler on mount
-  useState(() => {
-    const remove = addToastHandler((t) => {
+  useEffect(() => {
+    const removeHandler = addToastHandler((t) => {
       setToasts((prev) => [...prev, t])
-      setTimeout(() => {
+      window.setTimeout(() => {
         setToasts((prev) => prev.filter((p) => p.id !== t.id))
       }, 4000)
     })
-    return remove
-  })
+
+    return () => {
+      removeHandler()
+    }
+  }, [])
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
