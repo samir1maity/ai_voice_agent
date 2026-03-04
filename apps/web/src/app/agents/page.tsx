@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { agentsApi } from '@/lib/api-client'
+import { agentsApi, getErrorMessage } from '@/lib/api-client'
 import { toast } from '@/hooks/use-toast'
 
 interface Agent {
@@ -203,7 +203,7 @@ export default function AgentsPage() {
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-            Failed to load agents. Please refresh.
+            {getErrorMessage(error, 'Failed to load agents. Please refresh.')}
           </div>
         )}
 

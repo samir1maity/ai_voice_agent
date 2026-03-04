@@ -8,10 +8,49 @@ export const apiClient = axios.create({
   timeout: 30000,
 })
 
+export function getErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  return fallback
+}
+
 apiClient.interceptors.response.use(
   (res) => res,
-  (err) => {
-    const message = err.response?.data?.error || err.message || 'Something went wrong'
+  (err: unknown) => {
+    if (!axios.isAxiosError(err)) {
+      throw new Error('Unexpected error. Please try again.')
+    }
+
+    const apiError = err.response?.data?.error
+    const apiMessage = err.response?.data?.message
+    const status = err.response?.status
+
+    let message =
+      (typeof apiError === 'string' && apiError) ||
+      (typeof apiMessage === 'string' && apiMessage) ||
+      ''
+
+    if (!message) {
+      if (!err.response) {
+        message = 'Unable to connect to server. Please check your connection and try again.'
+      } else if (err.code === 'ECONNABORTED') {
+        message = 'Request timed out. Please try again.'
+      } else if (status === 400) {
+        message = 'Invalid request. Please check your input and try again.'
+      } else if (status === 401) {
+        message = 'Unauthorized request.'
+      } else if (status === 403) {
+        message = 'You do not have permission to perform this action.'
+      } else if (status === 404) {
+        message = 'Requested resource was not found.'
+      } else if (status && status >= 500) {
+        message = 'Server error. Please try again in a moment.'
+      } else {
+        message = err.message || 'Something went wrong'
+      }
+    }
+
     throw new Error(message)
   }
 )
@@ -63,7 +102,6 @@ export const callsApi = {
 // ─── Analytics APIs ───────────────────────────────────────────────────────────
 export const analyticsApi = {
   dashboard: () => apiClient.get('/analytics/dashboard').then((r) => r.data.data),
-  costs: (days?: number) => apiClient.get('/analytics/costs', { params: { days } }).then((r) => r.data.data),
 }
 
 // ─── Batch APIs ───────────────────────────────────────────────────────────────

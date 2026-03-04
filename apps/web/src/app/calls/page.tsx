@@ -16,13 +16,12 @@ import { CallStatusBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { Button } from '@/components/ui/button'
-import { callsApi } from '@/lib/api-client'
+import { callsApi, getErrorMessage } from '@/lib/api-client'
 
 interface Call {
   id: string
   status: string
   duration?: number
-  cost?: number
   createdAt: string
   candidate?: { id: string; name: string; phone: string }
   agent?: { id: string; name: string }
@@ -65,17 +64,8 @@ function formatDate(iso: string) {
 
 function formatDuration(s?: number) {
   if (!s) return '—'
-  return `${Math.floor(s / 60)}m ${s % 60}s`
-}
-
-function formatCost(cost?: number) {
-  if (cost == null) return '—'
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cost)
+  const totalSeconds = Math.max(0, Math.floor(s))
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
 }
 
 export default function CallsPage() {
@@ -155,7 +145,7 @@ export default function CallsPage() {
               <LoadingSpinner />
             ) : error ? (
               <div className="p-6 text-center text-sm text-red-500">
-                Failed to load calls. Please refresh.
+                {getErrorMessage(error, 'Failed to load calls. Please refresh.')}
               </div>
             ) : calls.length === 0 ? (
               <EmptyState
@@ -172,7 +162,6 @@ export default function CallsPage() {
                       <th className="px-6 py-3 font-medium text-gray-500">Agent</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Status</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Duration</th>
-                      <th className="px-6 py-3 font-medium text-gray-500">Cost</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Recording</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Date</th>
                     </tr>
@@ -195,9 +184,6 @@ export default function CallsPage() {
                         </td>
                         <td className="px-6 py-3 text-gray-600">
                           {formatDuration(call.duration)}
-                        </td>
-                        <td className="px-6 py-3 text-gray-600">
-                          {formatCost(call.cost)}
                         </td>
                         <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
                           {call.recordingUrl ? (

@@ -3,6 +3,16 @@ import { parse } from 'csv-parse/sync'
 import { prisma } from '@ai-voice-agent/db'
 import { AppError } from '../middleware/error.middleware'
 
+const FILTERABLE_CANDIDATE_STATUSES = new Set([
+  'PENDING',
+  'CALLED',
+  'NO_ANSWER',
+  'APPROVED',
+  'REJECTED',
+  'IN_PROCESS',
+  'READY_FOR_CALL',
+] as const)
+
 export const candidatesController = {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
@@ -10,11 +20,18 @@ export const candidatesController = {
       const limit = parseInt(req.query.limit as string) || 20
       const skip = (page - 1) * limit
       const { status, search } = req.query
-      console.log('req.query', req.query)
 
       const where: Record<string, unknown> = {}
       if (status) {
-        const statuses = (status as string).split(',').map((s) => s.trim()).filter(Boolean)
+        const statuses = (status as string)
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0 && FILTERABLE_CANDIDATE_STATUSES.has(s as never))
+
+        if (statuses.length === 0) {
+          throw new AppError(400, 'Invalid status filter')
+        }
+
         where.status = statuses.length === 1 ? statuses[0] : { in: statuses }
       }
       if (search) {
@@ -185,6 +202,7 @@ export const candidatesController = {
             update: {},
             create: {
               name: row.name.trim(),
+              countryCode: (row.countryCode || row.country_code || '91').replace(/\D/g, '') || '91',
               phone: row.phone.trim(),
               email: row.email?.trim() || undefined,
               currentRole: row.currentRole?.trim() || row.current_role?.trim() || undefined,

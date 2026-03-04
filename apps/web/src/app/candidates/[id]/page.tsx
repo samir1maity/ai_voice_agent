@@ -35,7 +35,7 @@ interface Candidate {
 interface CandidateCall {
   id: string
   status: string
-  durationSeconds?: number
+  duration?: number
   createdAt: string
   agentName?: string
 }
@@ -43,6 +43,13 @@ interface CandidateCall {
 interface PageProps {
   params: { id: string }
 }
+
+const MANUAL_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'IN_PROCESS', label: 'Still in Process' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+]
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-IN', {
@@ -56,7 +63,8 @@ function formatDate(iso: string) {
 
 function formatDuration(s?: number) {
   if (!s) return '—'
-  return `${Math.floor(s / 60)}m ${s % 60}s`
+  const totalSeconds = Math.max(0, Math.floor(s))
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
 }
 
 export default function CandidateProfilePage({ params }: PageProps) {
@@ -98,6 +106,19 @@ export default function CandidateProfilePage({ params }: PageProps) {
     },
     onError: (err: Error) => {
       toast({ title: 'Update failed', description: err.message, variant: 'destructive' })
+    },
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: (status: 'PENDING' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED') =>
+      candidatesApi.update(id, { status }),
+    onSuccess: () => {
+      toast({ title: 'Status updated', description: 'Candidate status has been updated.' })
+      queryClient.invalidateQueries({ queryKey: ['candidate', id] })
+      queryClient.invalidateQueries({ queryKey: ['candidates'] })
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Status update failed', description: err.message, variant: 'destructive' })
     },
   })
 
@@ -259,6 +280,35 @@ export default function CandidateProfilePage({ params }: PageProps) {
           <div className="space-y-6 lg:col-span-1">
             <Card>
               <CardHeader>
+                <CardTitle>Manual Review Status</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  After calls are done, mark the candidate manually.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {MANUAL_STATUS_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      size="sm"
+                      variant={candidate.status === option.value ? 'default' : 'outline'}
+                      onClick={() =>
+                        statusMutation.mutate(
+                          option.value as 'PENDING' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED'
+                        )
+                      }
+                      disabled={statusMutation.isPending}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle>Latest Call Insights</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -299,7 +349,7 @@ export default function CandidateProfilePage({ params }: PageProps) {
                   </p>
                 ) : (
                   <div className="divide-y">
-                    {calls.map((call, index) => (
+                    {calls.map((call, index) => (                    
                       <Link
                         key={call.id}
                         href={`/calls/${call.id}`}
@@ -317,7 +367,7 @@ export default function CandidateProfilePage({ params }: PageProps) {
                               )}
                             </div>
                             <p className="mt-0.5 text-xs text-gray-500">
-                              {formatDate(call.createdAt)} &bull; {formatDuration(call.durationSeconds)}
+                              {formatDate(call.createdAt)} &bull; {formatDuration(call.duration)}
                             </p>
                           </div>
                         </div>

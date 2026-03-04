@@ -12,6 +12,8 @@ export interface CallAnalytic {
   detectedTechStack: string[]
   extractedYearsExp?: number | null
   extractedCurrentRole?: string | null
+  salaryExpectation?: string | null
+  rawAnalysisPayload?: unknown | null
   createdAt: string
   updatedAt: string
 }

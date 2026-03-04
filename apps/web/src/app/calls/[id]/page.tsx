@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Phone, Clock, DollarSign, Calendar, User } from 'lucide-react'
+import { ArrowLeft, Phone, Clock, Calendar, User } from 'lucide-react'
 import { DashboardLayout } from '@/app/dashboard-layout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,7 +18,6 @@ interface CallDetail {
   id: string
   status: string
   duration?: number
-  cost?: number
   summary?: string | null
   transcript?: string | null
   createdAt: string
@@ -28,6 +27,7 @@ interface CallDetail {
     detectedTechStack?: string[]
     extractedYearsExp?: number | null
     extractedCurrentRole?: string | null
+    salaryExpectation?: string | null
   } | null
 }
 
@@ -47,17 +47,8 @@ function formatDate(iso: string) {
 
 function formatDuration(s?: number) {
   if (!s) return '—'
-  return `${Math.floor(s / 60)}m ${s % 60}s`
-}
-
-function formatCost(cost?: number) {
-  if (cost == null) return '—'
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cost)
+  const totalSeconds = Math.max(0, Math.floor(s))
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
 }
 
 function MetaItem({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
@@ -133,7 +124,6 @@ export default function CallDetailPage({ params }: PageProps) {
                 )}
                 <MetaItem icon={Calendar} label="Date" value={formatDate(call.createdAt)} />
                 <MetaItem icon={Clock} label="Duration" value={formatDuration(call.duration)} />
-                <MetaItem icon={DollarSign} label="Cost" value={formatCost(call.cost)} />
               </div>
             </div>
           </div>
@@ -179,6 +169,12 @@ export default function CallDetailPage({ params }: PageProps) {
                     {call.analytics?.extractedYearsExp != null
                       ? `${call.analytics.extractedYearsExp} years`
                       : '—'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-700">Salary Expectation</p>
+                  <p className="text-sm text-gray-700">
+                    {call.analytics?.salaryExpectation?.trim() || '—'}
                   </p>
                 </div>
               </CardContent>

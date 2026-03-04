@@ -23,10 +23,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { CandidateStatusBadge } from '@/components/shared/StatusBadge'
 import { CallButton } from '@/components/calls/CallButton'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { batchApi, candidatesApi } from '@/lib/api-client'
+import { batchApi, candidatesApi, getErrorMessage } from '@/lib/api-client'
 import { toast } from '@/hooks/use-toast'
 
 interface Candidate {
@@ -51,12 +60,23 @@ interface CandidatesResponse {
   }
 }
 
+type ManualCandidateStatus = 'APPROVED' | 'REJECTED' | 'IN_PROCESS' | 'PENDING'
+
+const MANUAL_STATUS_OPTIONS: Array<{ value: ManualCandidateStatus; label: string }> = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'IN_PROCESS', label: 'Still in Process' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+]
+
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Statuses' },
   { value: 'PENDING', label: 'Pending' },
-  { value: 'SCHEDULED', label: 'Scheduled' },
   { value: 'CALLED', label: 'Called' },
   { value: 'NO_ANSWER', label: 'No Answer' },
+  { value: 'IN_PROCESS', label: 'Still in Process' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
 ]
 
 function formatDate(iso?: string | null) {
@@ -75,8 +95,11 @@ export default function CandidatesPage() {
   const [status, setStatus] = useState('ALL')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [batchAgentId] = useState<string>('')
-  const [showBatchConfirm, setShowBatchConfirm] = useState(false)
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    candidateId: string
+    candidateName: string
+    status: ManualCandidateStatus
+  } | null>(null)
 
   const { data, isLoading, error } = useQuery<CandidatesResponse>({
     queryKey: ['candidates', { search, status, page }],
@@ -106,6 +129,19 @@ export default function CandidatesPage() {
     },
     onError: (err: Error) => {
       toast({ title: 'Batch failed', description: err.message, variant: 'destructive' })
+    },
+  })
+
+  const manualStatusMutation = useMutation({
+    mutationFn: ({ candidateId, status }: { candidateId: string; status: ManualCandidateStatus }) =>
+      candidatesApi.update(candidateId, { status }),
+    onSuccess: () => {
+      toast({ title: 'Status updated', description: 'Candidate status has been updated.' })
+      queryClient.invalidateQueries({ queryKey: ['candidates'] })
+      queryClient.invalidateQueries({ queryKey: ['candidate'] })
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Status update failed', description: err.message, variant: 'destructive' })
     },
   })
 
@@ -139,6 +175,15 @@ export default function CandidatesPage() {
     setPage(1)
   }
 
+  const confirmStatusChange = () => {
+    if (!pendingStatusChange) return
+    manualStatusMutation.mutate({
+      candidateId: pendingStatusChange.candidateId,
+      status: pendingStatusChange.status,
+    })
+    setPendingStatusChange(null)
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -151,12 +196,12 @@ export default function CandidatesPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link href="/candidates/import">
+            {/* <Link href="/candidates/import">
               <Button variant="outline" className="gap-2">
                 <Upload className="h-4 w-4" />
                 Import CSV
               </Button>
-            </Link>
+            </Link> */}
             <Link href="/candidates/new">
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -220,7 +265,7 @@ export default function CandidatesPage() {
               <LoadingSpinner />
             ) : error ? (
               <div className="p-6 text-center text-sm text-red-500">
-                Failed to load candidates. Please refresh.
+                {getErrorMessage(error, 'Failed to load candidates. Please refresh.')}
               </div>
             ) : candidates.length === 0 ? (
               <EmptyState
@@ -259,6 +304,7 @@ export default function CandidatesPage() {
                       <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Current Role</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Exp (yrs)</th>
+                      <th className="px-4 py-3 font-medium text-gray-500">Status</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Calls</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Last Call</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Actions</th>
@@ -266,52 +312,85 @@ export default function CandidatesPage() {
                   </thead>
                   <tbody className="divide-y">
                     {candidates.map((candidate) => (
-                      <tr key={candidate.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selected.has(candidate.id)}
-                            onChange={() => toggleSelect(candidate.id)}
-                            className="rounded border-gray-300"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/candidates/${candidate.id}`}
-                            className="font-medium text-gray-900 hover:text-blue-600"
-                          >
-                            {candidate.name}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{candidate.phone}</td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {candidate.currentRole ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {candidate.yearsOfExperience ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{candidate._count?.calls ?? 0}</td>
-                        <td className="px-4 py-3 text-gray-500">
-                          {formatDate(candidate.lastCallDate)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Link href={`/candidates/${candidate.id}`}>
-                              <Button variant="ghost" size="sm">
-                                View
-                              </Button>
-                            </Link>
-                            <CallButton
-                              candidateId={candidate.id}
-                              candidateName={candidate.name}
-                              candidatePhone={candidate.phone}
-                              onSuccess={() =>
-                                queryClient.invalidateQueries({ queryKey: ['candidates'] })
-                              }
-                            />
-                          </div>
-                        </td>
-                      </tr>
+                      (() => {
+                        const manualStatus = MANUAL_STATUS_OPTIONS.some((s) => s.value === candidate.status)
+                          ? (candidate.status as ManualCandidateStatus)
+                          : undefined
+
+                        return (
+                          <tr key={candidate.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selected.has(candidate.id)}
+                                onChange={() => toggleSelect(candidate.id)}
+                                className="rounded border-gray-300"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <Link
+                                href={`/candidates/${candidate.id}`}
+                                className="font-medium text-gray-900 hover:text-blue-600"
+                              >
+                                {candidate.name}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">{candidate.phone}</td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {candidate.currentRole ?? '—'}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {candidate.yearsOfExperience ?? '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <CandidateStatusBadge status={candidate.status} />
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">{candidate._count?.calls ?? 0}</td>
+                            <td className="px-4 py-3 text-gray-500">
+                              {formatDate(candidate.lastCallDate)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <Link href={`/candidates/${candidate.id}`}>
+                                  <Button variant="ghost" size="sm">
+                                    View
+                                  </Button>
+                                </Link>
+                                <CallButton
+                                  candidateId={candidate.id}
+                                  candidateName={candidate.name}
+                                  candidatePhone={candidate.phone}
+                                  onSuccess={() =>
+                                    queryClient.invalidateQueries({ queryKey: ['candidates'] })
+                                  }
+                                />
+                                <Select
+                                  value={manualStatus}
+                                  onValueChange={(value) =>
+                                    setPendingStatusChange({
+                                      candidateId: candidate.id,
+                                      candidateName: candidate.name,
+                                      status: value as ManualCandidateStatus,
+                                    })
+                                  }
+                                  disabled={manualStatusMutation.isPending}
+                                >
+                                  <SelectTrigger className="h-8 w-40">
+                                    <SelectValue placeholder="Set status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {MANUAL_STATUS_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })()
                     ))}
                   </tbody>
                 </table>
@@ -349,6 +428,34 @@ export default function CandidatesPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!pendingStatusChange} onOpenChange={(open) => !open && setPendingStatusChange(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Status Change</DialogTitle>
+            <DialogDescription>
+              {pendingStatusChange
+                ? `Change status for ${pendingStatusChange.candidateName} to ${MANUAL_STATUS_OPTIONS.find((s) => s.value === pendingStatusChange.status)?.label}?`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p>
+              If a candidate is marked <strong>Still in Process</strong>, <strong>Approved</strong>, or <strong>Rejected</strong>, automatic
+              call/webhook status updates will not overwrite this status.
+            </p>
+            <p>Use <strong>Pending</strong> to re-enable automatic call status updates.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingStatusChange(null)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmStatusChange} disabled={manualStatusMutation.isPending}>
+              {manualStatusMutation.isPending ? 'Updating...' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   )
 }

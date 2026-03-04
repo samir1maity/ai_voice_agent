@@ -55,6 +55,7 @@ class BolnaService {
   }
 
   async initiateCall(payload: BolnaCallInitiatePayload): Promise<BolnaCallInitiateResponse> {
+    console.log('payload', payload)
     const response = await this.client.post<BolnaCallInitiateResponse>('/call', payload)
     return response.data
   }

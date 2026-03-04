@@ -11,9 +11,12 @@ datasource db {
 
 enum CandidateStatus {
   PENDING
-  SCHEDULED
   CALLED
   NO_ANSWER
+  APPROVED
+  REJECTED
+  IN_PROCESS
+  READY_FOR_CALL
 }
 
 enum CallStatus {
@@ -53,6 +56,7 @@ model Agent {
 model Candidate {
   id                String          @id @default(cuid())
   name              String
+  countryCode       String          @default("91")
   phone             String          @unique
   email             String?         @unique
   currentRole       String?
@@ -112,6 +116,8 @@ model CallAnalytic {
   detectedTechStack    String[]
   extractedYearsExp    Int?
   extractedCurrentRole String?
+  salaryExpectation    String?
+  rawAnalysisPayload   Json?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

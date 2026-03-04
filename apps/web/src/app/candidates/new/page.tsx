@@ -31,8 +31,18 @@ const TIMEZONES = [
   { value: 'Australia/Sydney', label: 'AEST - Australian Eastern Time (UTC+10)' },
 ]
 
+const COUNTRY_CODES = [
+  { value: '91', label: '+91 (India)' },
+  { value: '1', label: '+1 (US/Canada)' },
+  { value: '44', label: '+44 (UK)' },
+  { value: '61', label: '+61 (Australia)' },
+  { value: '971', label: '+971 (UAE)' },
+  { value: '65', label: '+65 (Singapore)' },
+]
+
 interface CandidateFormData {
   name: string
+  countryCode: string
   phone: string
   email: string
   currentRole: string
@@ -53,6 +63,7 @@ export default function NewCandidatePage() {
 
   const [form, setForm] = useState<CandidateFormData>({
     name: '',
+    countryCode: '91',
     phone: '',
     email: '',
     currentRole: '',
@@ -145,13 +156,30 @@ export default function NewCandidatePage() {
                 <Label htmlFor="phone">
                   Phone Number <span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  id="phone"
-                  placeholder="+91 98765 43210"
-                  value={form.phone}
-                  onChange={set('phone')}
-                  className={errors.phone ? 'border-red-400' : ''}
-                />
+                <div className="flex gap-2">
+                  <Select
+                    value={form.countryCode}
+                    onValueChange={(v) => setForm((prev) => ({ ...prev, countryCode: v }))}
+                  >
+                    <SelectTrigger className="w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNTRY_CODES.map((cc) => (
+                        <SelectItem key={cc.value} value={cc.value}>
+                          {cc.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    id="phone"
+                    placeholder="e.g. 9876543210"
+                    value={form.phone}
+                    onChange={set('phone')}
+                    className={errors.phone ? 'border-red-400' : ''}
+                  />
+                </div>
                 {errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}
               </div>
 

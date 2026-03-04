@@ -8,6 +8,12 @@ export interface ScreeningResult {
   detectedTechStack: string[]   // e.g. ['Python', 'Node.js', 'React']
   extractedYearsExp: number | null
   extractedCurrentRole: string | null
+  salaryExpectation: string | null
+}
+
+export interface ScreeningAnalyzeOutput {
+  result: ScreeningResult
+  rawResponse: string
 }
 
 const PROMPT_TEMPLATE = `You are an HR screening assistant. Analyze the following candidate interview transcript and return a JSON object.
@@ -21,16 +27,18 @@ Return ONLY valid JSON with this exact shape:
 {
   "detectedTechStack": ["<tech1>", "<tech2>", ...],
   "extractedYearsExp": <integer or null>,
-  "extractedCurrentRole": "<string or null>"
+  "extractedCurrentRole": "<string or null>",
+  "salaryExpectation": "<string or null>"
 }
 
 Extraction guide:
 - detectedTechStack: list any technologies, frameworks, or tools the candidate mentioned
 - extractedYearsExp: total years of professional experience mentioned, or null if not stated
-- extractedCurrentRole: their current job title if mentioned, or null`
+- extractedCurrentRole: their current job title if mentioned, or null
+- salaryExpectation: exact salary expectation as mentioned (include currency/range/period when available), or null`
 
 class ScreeningService {
-  async analyze(transcript: string, summary: string): Promise<ScreeningResult> {
+  async analyzeWithRaw(transcript: string, summary: string): Promise<ScreeningAnalyzeOutput> {
     const summarySection = summary
       ? `Call Summary:\n${summary}`
       : ''
@@ -40,7 +48,7 @@ class ScreeningService {
       .replace('{SUMMARY_SECTION}', summarySection)
 
     const response = await genai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash-lite',
       contents: prompt,
     })
 
@@ -49,6 +57,11 @@ class ScreeningService {
     if (!jsonMatch) throw new Error('Gemini returned no JSON')
 
     const result = JSON.parse(jsonMatch[0]) as ScreeningResult
+    return { result, rawResponse: text }
+  }
+
+  async analyze(transcript: string, summary: string): Promise<ScreeningResult> {
+    const { result } = await this.analyzeWithRaw(transcript, summary)
     return result
   }
 

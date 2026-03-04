@@ -12,11 +12,6 @@ export function formatDuration(seconds?: number | null): string {
   return `${mins}m ${secs}s`
 }
 
-export function formatCost(cost?: number | null): string {
-  if (cost === null || cost === undefined) return '—'
-  return `₹${cost.toFixed(2)}`
-}
-
 export function formatDate(dateStr?: string | null): string {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('en-IN', {

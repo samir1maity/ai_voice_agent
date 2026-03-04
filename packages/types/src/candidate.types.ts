@@ -1,12 +1,16 @@
 export type CandidateStatus =
   | 'PENDING'
-  | 'SCHEDULED'
   | 'CALLED'
   | 'NO_ANSWER'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'IN_PROCESS'
+  | 'READY_FOR_CALL'
 
 export interface Candidate {
   id: string
   name: string
+  countryCode: string
   phone: string
   email?: string | null
   currentRole?: string | null
@@ -23,12 +27,14 @@ export interface Candidate {
 
 export interface CreateCandidateDto {
   name: string
+  countryCode?: string
   phone: string
   email?: string
   currentRole?: string
   yearsOfExperience?: number
   timezone?: string
   notes?: string
+  status?: CandidateStatus
 }
 
 export interface UpdateCandidateDto extends Partial<CreateCandidateDto> {}

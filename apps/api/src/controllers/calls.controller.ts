@@ -2,6 +2,24 @@ import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ai-voice-agent/db'
 import { bolnaService } from '../services/bolna.service'
 import { AppError } from '../middleware/error.middleware'
+import { screeningService } from '../services/screening.service'
+
+function formatRecipientPhone(phone: string, countryCode?: string | null): string {
+  const raw = (phone || '').trim()
+  if (raw.startsWith('+')) {
+    return `+${raw.replace(/\D/g, '')}`
+  }
+  if (raw.startsWith('00')) {
+    return `+${raw.replace(/\D/g, '').replace(/^00/, '')}`
+  }
+
+  const phoneDigits = raw.replace(/\D/g, '')
+  const codeDigits = (countryCode || '91').replace(/\D/g, '') || '91'
+
+  if (!phoneDigits) return `+${codeDigits}`
+  if (phoneDigits.startsWith(codeDigits) && phoneDigits.length > 10) return `+${phoneDigits}`
+  return `+${codeDigits}${phoneDigits}`
+}
 
 export const callsController = {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -65,27 +83,28 @@ export const callsController = {
       if (!candidate) throw new AppError(404, 'Candidate not found')
       if (!agent) throw new AppError(404, 'Agent not found')
       if (!agent.bolnaAgentId) throw new AppError(400, 'Agent is not synced with Bolna. Please sync the agent first.')
+      const recipientPhone = formatRecipientPhone(candidate.phone, candidate.countryCode)
 
       const call = await prisma.call.create({
         data: {
           agentId,
           candidateId,
           status: 'INITIATED',
-          candidatePhoneNumber: candidate.phone,
+          candidatePhoneNumber: recipientPhone,
           callType: 'outbound',
           initiatedAt: new Date(),
         },
       })
 
-      await prisma.candidate.update({
-        where: { id: candidateId },
-        data: { status: 'SCHEDULED' },
+      await prisma.candidate.updateMany({
+        where: { id: candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+        data: { status: 'PENDING' },
       })
 
       try {
         const bolnaRes = await bolnaService.initiateCall({
           agent_id: agent.bolnaAgentId,
-          recipient_phone_number: candidate.phone,
+          recipient_phone_number: recipientPhone,
           recipient_data: { name: candidate.name, timezone: candidate.timezone },
         })
 
@@ -95,7 +114,10 @@ export const callsController = {
         })
       } catch (bolnaErr) {
         await prisma.call.update({ where: { id: call.id }, data: { status: 'FAILED' } })
-        await prisma.candidate.update({ where: { id: candidateId }, data: { status: 'PENDING' } })
+        await prisma.candidate.updateMany({
+          where: { id: candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+          data: { status: 'PENDING' },
+        })
         throw bolnaErr
       }
 
@@ -154,13 +176,69 @@ export const callsController = {
               cost: (bolnaData.total_cost as number) || undefined,
               completedAt: isCompleted ? new Date() : undefined,
             },
-            select: { id: true, status: true, bolnaExecutionId: true, duration: true, completedAt: true, candidateId: true },
+            select: {
+              id: true,
+              status: true,
+              bolnaExecutionId: true,
+              duration: true,
+              completedAt: true,
+              candidateId: true,
+              transcript: true,
+              summary: true,
+            },
           })
 
-          if (isFailed || isNoAnswer) {
-            await prisma.candidate.update({
-              where: { id: updated.candidateId },
+          if (isCompleted && updated.transcript) {
+            try {
+              const { result, rawResponse } = await screeningService.analyzeWithRaw(
+                updated.transcript,
+                updated.summary || ''
+              )
+
+              await prisma.callAnalytic.upsert({
+                where: { callId: updated.id },
+                update: {
+                  detectedTechStack: result.detectedTechStack || [],
+                  extractedYearsExp: result.extractedYearsExp ?? null,
+                  extractedCurrentRole: result.extractedCurrentRole ?? null,
+                  salaryExpectation: result.salaryExpectation ?? null,
+                  rawAnalysisPayload: {
+                    provider: 'gemini-2.0-flash',
+                    rawResponse,
+                  },
+                },
+                create: {
+                  callId: updated.id,
+                  candidateId: updated.candidateId,
+                  detectedTechStack: result.detectedTechStack || [],
+                  extractedYearsExp: result.extractedYearsExp ?? null,
+                  extractedCurrentRole: result.extractedCurrentRole ?? null,
+                  salaryExpectation: result.salaryExpectation ?? null,
+                  rawAnalysisPayload: {
+                    provider: 'gemini-2.0-flash',
+                    rawResponse,
+                  },
+                },
+              })
+            } catch (analysisErr) {
+              console.error(`[Call Status] Screening analysis failed for call ${updated.id}:`, analysisErr)
+            }
+          }
+
+          if (isCompleted) {
+            await prisma.candidate.updateMany({
+              where: { id: updated.candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+              data: { status: 'CALLED' },
+            })
+          } else if (isNoAnswer) {
+            await prisma.candidate.updateMany({
+              where: { id: updated.candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
               data: { status: 'NO_ANSWER' },
+            })
+          } else if (isFailed) {
+            await prisma.candidate.updateMany({
+              where: { id: updated.candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+              data: { status: 'PENDING' },
             })
           }
 

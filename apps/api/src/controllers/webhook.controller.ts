@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ai-voice-agent/db'
 import type { BolnaWebhookPayload } from '@ai-voice-agent/types'
+import { screeningService } from '../services/screening.service'
 
 export const webhookController = {
   async handleBolna(req: Request, res: Response, next: NextFunction) {
@@ -96,10 +97,57 @@ export const webhookController = {
         return
       }
 
-      if (isFailed || isNoAnswer) {
-        await prisma.candidate.update({
-          where: { id: call.candidateId },
+      if (isCompleted && call.transcript) {
+        try {
+          const { result, rawResponse } = await screeningService.analyzeWithRaw(
+            call.transcript,
+            call.summary || ''
+          )
+
+          await prisma.callAnalytic.upsert({
+            where: { callId: call.id },
+            update: {
+              detectedTechStack: result.detectedTechStack || [],
+              extractedYearsExp: result.extractedYearsExp ?? null,
+              extractedCurrentRole: result.extractedCurrentRole ?? null,
+              salaryExpectation: result.salaryExpectation ?? null,
+              rawAnalysisPayload: {
+                provider: 'gemini-2.0-flash',
+                rawResponse,
+              },
+            },
+            create: {
+              callId: call.id,
+              candidateId: call.candidateId,
+              detectedTechStack: result.detectedTechStack || [],
+              extractedYearsExp: result.extractedYearsExp ?? null,
+              extractedCurrentRole: result.extractedCurrentRole ?? null,
+              salaryExpectation: result.salaryExpectation ?? null,
+              rawAnalysisPayload: {
+                provider: 'gemini-2.0-flash',
+                rawResponse,
+              },
+            },
+          })
+        } catch (analysisErr) {
+          console.error(`[Webhook] Screening analysis failed for call ${call.id}:`, analysisErr)
+        }
+      }
+
+      if (isCompleted) {
+        await prisma.candidate.updateMany({
+          where: { id: call.candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+          data: { status: 'CALLED' },
+        })
+      } else if (isNoAnswer) {
+        await prisma.candidate.updateMany({
+          where: { id: call.candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
           data: { status: 'NO_ANSWER' },
+        })
+      } else if (isFailed) {
+        await prisma.candidate.updateMany({
+          where: { id: call.candidateId, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+          data: { status: 'PENDING' },
         })
       }
     } catch (err) {

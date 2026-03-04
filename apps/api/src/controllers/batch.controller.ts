@@ -3,6 +3,23 @@ import { prisma } from '@ai-voice-agent/db'
 import { bolnaService } from '../services/bolna.service'
 import { AppError } from '../middleware/error.middleware'
 
+function formatRecipientPhone(phone: string, countryCode?: string | null): string {
+  const raw = (phone || '').trim()
+  if (raw.startsWith('+')) {
+    return `+${raw.replace(/\D/g, '')}`
+  }
+  if (raw.startsWith('00')) {
+    return `+${raw.replace(/\D/g, '').replace(/^00/, '')}`
+  }
+
+  const phoneDigits = raw.replace(/\D/g, '')
+  const codeDigits = (countryCode || '91').replace(/\D/g, '') || '91'
+
+  if (!phoneDigits) return `+${codeDigits}`
+  if (phoneDigits.startsWith(codeDigits) && phoneDigits.length > 10) return `+${phoneDigits}`
+  return `+${codeDigits}${phoneDigits}`
+}
+
 export const batchController = {
   async initiateCalls(req: Request, res: Response, next: NextFunction) {
     try {
@@ -23,26 +40,26 @@ export const batchController = {
       // Process candidates with a delay to avoid rate limiting
       for (const candidate of candidates) {
         try {
+          const recipientPhone = formatRecipientPhone(candidate.phone, candidate.countryCode)
           const call = await prisma.call.create({
             data: {
               agentId,
               candidateId: candidate.id,
               status: 'INITIATED',
-              candidatePhoneNumber: candidate.phone,
+              candidatePhoneNumber: recipientPhone,
               callType: 'outbound',
               initiatedAt: new Date(),
             },
           })
 
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data: { status: 'SCHEDULED' },
+          await prisma.candidate.updateMany({
+            where: { id: candidate.id, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+            data: { status: 'PENDING' },
           })
-
           try {
             const bolnaRes = await bolnaService.initiateCall({
               agent_id: agent.bolnaAgentId!,
-              recipient_phone_number: candidate.phone,
+              recipient_phone_number: recipientPhone,
               recipient_data: { name: candidate.name, timezone: candidate.timezone },
             })
 
@@ -57,7 +74,10 @@ export const batchController = {
             results.callIds.push(call.id)
           } catch {
             await prisma.call.update({ where: { id: call.id }, data: { status: 'FAILED' } })
-            await prisma.candidate.update({ where: { id: candidate.id }, data: { status: 'PENDING' } })
+            await prisma.candidate.updateMany({
+              where: { id: candidate.id, status: { notIn: ['APPROVED', 'REJECTED', 'IN_PROCESS'] } },
+              data: { status: 'PENDING' },
+            })
             results.failed++
           }
 

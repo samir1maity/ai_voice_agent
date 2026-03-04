@@ -22,21 +22,19 @@ import {
 import { DashboardLayout } from '@/app/dashboard-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CallStatusBadge } from '@/components/shared/StatusBadge'
-import { analyticsApi } from '@/lib/api-client'
+import { analyticsApi, getErrorMessage } from '@/lib/api-client'
 
 interface DashboardData {
   metrics: {
     totalCalls: number
     completedCalls: number
     avgDuration: number
-    totalCost: number
     callsToday: number
     activeAgents: number
     totalCandidates: number
   }
   funnel: {
     pending: number
-    scheduled: number
     called: number
     noAnswer: number
   }
@@ -95,8 +93,9 @@ function StatCardSkeleton() {
 }
 
 function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
+  const totalSeconds = Math.max(0, Math.floor(seconds))
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
   return `${m}m ${s}s`
 }
 
@@ -110,14 +109,12 @@ function formatDate(iso: string): string {
 
 const PIPELINE_COLORS: Record<string, string> = {
   pending: '#9ca3af',
-  scheduled: '#3b82f6',
   called: '#a855f7',
   noAnswer: '#f59e0b',
 }
 
 const PIPELINE_LABELS: Record<string, string> = {
   pending: 'Pending',
-  scheduled: 'Scheduled',
   called: 'Called',
   noAnswer: 'No Answer',
 }
@@ -164,7 +161,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Candidate Pipeline</CardTitle>
@@ -229,7 +226,7 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
-        </div>
+        </div> */}
 
         <Card>
           <CardHeader>
@@ -281,7 +278,7 @@ export default function DashboardPage() {
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-            Failed to load dashboard data. Please refresh.
+            {getErrorMessage(error, 'Failed to load dashboard data. Please refresh.')}
           </div>
         )}
       </div>

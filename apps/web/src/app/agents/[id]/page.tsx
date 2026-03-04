@@ -73,7 +73,8 @@ function formatDate(iso: string) {
 
 function formatDuration(s?: number) {
   if (!s) return '—'
-  return `${Math.floor(s / 60)}m ${s % 60}s`
+  const totalSeconds = Math.max(0, Math.floor(s))
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
 }
 
 export default function EditAgentPage({ params }: PageProps) {

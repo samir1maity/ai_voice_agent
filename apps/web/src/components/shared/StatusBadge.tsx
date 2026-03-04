@@ -2,17 +2,27 @@
 
 import { Badge } from '@/components/ui/badge'
 
-type CandidateStatus = 'PENDING' | 'SCHEDULED' | 'CALLED' | 'NO_ANSWER'
+type CandidateStatus =
+  | 'PENDING'
+  | 'CALLED'
+  | 'NO_ANSWER'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'IN_PROCESS'
+  | 'READY_FOR_CALL'
 type CallStatus = 'INITIATED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'NO_ANSWER'
 
 const candidateStatusConfig: Record<
   CandidateStatus,
-  { label: string; variant: 'gray' | 'info' | 'purple' | 'warning' }
+  { label: string; variant: 'gray' | 'info' | 'purple' | 'warning' | 'success' | 'destructive' }
 > = {
   PENDING: { label: 'Pending', variant: 'gray' },
-  SCHEDULED: { label: 'Scheduled', variant: 'info' },
   CALLED: { label: 'Called', variant: 'purple' },
   NO_ANSWER: { label: 'No Answer', variant: 'warning' },
+  APPROVED: { label: 'Approved', variant: 'success' },
+  REJECTED: { label: 'Rejected', variant: 'destructive' },
+  IN_PROCESS: { label: 'Still in Process', variant: 'info' },
+  READY_FOR_CALL: { label: 'Ready for Call', variant: 'gray' },
 }
 
 const callStatusConfig: Record<
