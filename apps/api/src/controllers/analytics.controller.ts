@@ -10,8 +10,6 @@ export const analyticsController = {
       const [
         totalCalls,
         completedCalls,
-        qualifiedCount,
-        disqualifiedCount,
         callsToday,
         activeAgents,
         totalCandidates,
@@ -23,8 +21,6 @@ export const analyticsController = {
       ] = await Promise.all([
         prisma.call.count(),
         prisma.call.count({ where: { status: 'COMPLETED' } }),
-        prisma.candidate.count({ where: { status: 'QUALIFIED' } }),
-        prisma.candidate.count({ where: { status: 'DISQUALIFIED' } }),
         prisma.call.count({ where: { initiatedAt: { gte: today } } }),
         prisma.agent.count({ where: { status: 'ACTIVE' } }),
         prisma.candidate.count(),
@@ -33,18 +29,11 @@ export const analyticsController = {
         prisma.call.findMany({
           take: 10,
           orderBy: { createdAt: 'desc' },
-          include: {
-            candidate: { select: { name: true, phone: true } },
-            analytics: { select: { overallScore: true, isQualified: true } },
-          },
+          include: { candidate: { select: { name: true, phone: true } } },
         }),
         prisma.candidate.groupBy({ by: ['status'], _count: true }),
         prisma.callAnalytic.findMany({ select: { detectedTechStack: true } }),
       ])
-
-      const qualificationRate = completedCalls > 0
-        ? Math.round((qualifiedCount / completedCalls) * 100)
-        : 0
 
       const statusMap: Record<string, number> = {}
       for (const s of candidatesByStatus) statusMap[s.status] = s._count
@@ -57,9 +46,6 @@ export const analyticsController = {
           metrics: {
             totalCalls,
             completedCalls,
-            qualifiedCandidates: qualifiedCount,
-            disqualifiedCandidates: disqualifiedCount,
-            qualificationRate,
             avgDuration: Math.round(avgDurationResult._avg.duration || 0),
             totalCost: Math.round((totalCostResult._sum.cost || 0) * 100) / 100,
             callsToday,
@@ -70,8 +56,6 @@ export const analyticsController = {
             pending: statusMap.PENDING || 0,
             scheduled: statusMap.SCHEDULED || 0,
             called: statusMap.CALLED || 0,
-            qualified: statusMap.QUALIFIED || 0,
-            disqualified: statusMap.DISQUALIFIED || 0,
             noAnswer: statusMap.NO_ANSWER || 0,
           },
           recentCalls: recentCalls.map((c) => ({
@@ -81,8 +65,6 @@ export const analyticsController = {
             status: c.status,
             duration: c.duration,
             cost: c.cost,
-            overallScore: c.analytics?.overallScore,
-            isQualified: c.analytics?.isQualified,
             initiatedAt: c.initiatedAt,
           })),
           techStackFrequency: techFrequency,

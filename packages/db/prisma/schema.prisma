@@ -13,8 +13,6 @@ enum CandidateStatus {
   PENDING
   SCHEDULED
   CALLED
-  QUALIFIED
-  DISQUALIFIED
   NO_ANSWER
 }
 
@@ -64,8 +62,6 @@ model Candidate {
   timezone          String          @default("Asia/Kolkata")
   notes             String?         @db.Text
   importBatchId     String?
-  latestScore       Int?
-  latestSummary     String?         @db.Text
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -113,9 +109,6 @@ model CallAnalytic {
   id                   String   @id @default(cuid())
   callId               String   @unique
   candidateId          String
-  overallScore         Int?
-  isQualified          Boolean?
-  reason               String?  @db.Text
   detectedTechStack    String[]
   extractedYearsExp    Int?
   extractedCurrentRole String?
@@ -126,7 +119,6 @@ model CallAnalytic {
   candidate Candidate @relation(fields: [candidateId], references: [id])
 
   @@index([candidateId])
-  @@index([isQualified])
   @@map("call_analytics")
 }
 

@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CandidateStatusBadge, CallStatusBadge } from '@/components/shared/StatusBadge'
 import { CallButton } from '@/components/calls/CallButton'
-import { ScreeningScore } from '@/components/calls/ScreeningScore'
 import { TechStackTags } from '@/components/calls/TechStackTags'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { candidatesApi } from '@/lib/api-client'
@@ -28,11 +27,6 @@ interface Candidate {
   timezone?: string
   latestCall?: {
     id: string
-    overallScore?: number | null
-    technicalScore?: number | null
-    experienceScore?: number | null
-    communicationScore?: number | null
-    isQualified?: boolean | null
     summary?: string | null
     techStack?: string[]
   } | null
@@ -42,7 +36,6 @@ interface CandidateCall {
   id: string
   status: string
   durationSeconds?: number
-  overallScore?: number | null
   createdAt: string
   agentName?: string
 }
@@ -262,22 +255,15 @@ export default function CandidateProfilePage({ params }: PageProps) {
         )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Latest Screening Result */}
+          {/* Latest Call Insights */}
           <div className="space-y-6 lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle>Latest Screening Result</CardTitle>
+                <CardTitle>Latest Call Insights</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {latestCall ? (
                   <>
-                    <ScreeningScore
-                      overallScore={latestCall.overallScore}
-                      technicalScore={latestCall.technicalScore}
-                      experienceScore={latestCall.experienceScore}
-                      communicationScore={latestCall.communicationScore}
-                      isQualified={latestCall.isQualified}
-                    />
                     {latestCall.techStack && latestCall.techStack.length > 0 && (
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-700">Tech Stack</p>
@@ -293,7 +279,7 @@ export default function CandidateProfilePage({ params }: PageProps) {
                   </>
                 ) : (
                   <p className="py-4 text-center text-sm text-gray-400">
-                    No screening data yet. Start a call to see results.
+                    No call insights yet. Start a call to see results.
                   </p>
                 )}
               </CardContent>
@@ -323,34 +309,17 @@ export default function CandidateProfilePage({ params }: PageProps) {
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
                             {calls.length - index}
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <CallStatusBadge status={call.status} />
-                              {call.agentName && (
-                                <span className="text-xs text-gray-400">via {call.agentName}</span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <CallStatusBadge status={call.status} />
+                            {call.agentName && (
+                              <span className="text-xs text-gray-400">via {call.agentName}</span>
                               )}
                             </div>
                             <p className="mt-0.5 text-xs text-gray-500">
                               {formatDate(call.createdAt)} &bull; {formatDuration(call.durationSeconds)}
                             </p>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          {call.overallScore != null ? (
-                            <span
-                              className={`text-lg font-bold ${
-                                call.overallScore >= 70
-                                  ? 'text-emerald-600'
-                                  : call.overallScore >= 50
-                                  ? 'text-yellow-600'
-                                  : 'text-red-600'
-                              }`}
-                            >
-                              {call.overallScore}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-gray-400">—</span>
-                          )}
                         </div>
                       </Link>
                     ))}

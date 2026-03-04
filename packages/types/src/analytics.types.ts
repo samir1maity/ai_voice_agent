@@ -1,9 +1,6 @@
 export interface DashboardMetrics {
   totalCalls: number
   completedCalls: number
-  qualifiedCandidates: number
-  disqualifiedCandidates: number
-  qualificationRate: number
   avgDuration: number
   totalCost: number
   callsToday: number
@@ -15,8 +12,6 @@ export interface CandidatePipelineFunnel {
   pending: number
   scheduled: number
   called: number
-  qualified: number
-  disqualified: number
   noAnswer: number
 }
 
@@ -39,8 +34,6 @@ export interface RecentCall {
   status: string
   duration?: number | null
   cost?: number | null
-  overallScore?: number | null
-  isQualified?: boolean | null
   initiatedAt: string
 }
 

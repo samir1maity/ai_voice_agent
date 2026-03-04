@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ai-voice-agent/db'
-import { screeningService } from '../services/screening.service'
 import type { BolnaWebhookPayload } from '@ai-voice-agent/types'
 
 export const webhookController = {
@@ -97,42 +96,7 @@ export const webhookController = {
         return
       }
 
-      if (isCompleted && payload.transcript) {
-        const analysis = await screeningService.analyze(payload.transcript, payload.summary || '')
-
-        await prisma.callAnalytic.upsert({
-          where: { callId: call.id },
-          update: {
-            overallScore: analysis.overallScore,
-            isQualified: analysis.isQualified,
-            reason: analysis.reason,
-            detectedTechStack: analysis.detectedTechStack,
-            extractedYearsExp: analysis.extractedYearsExp,
-            extractedCurrentRole: analysis.extractedCurrentRole,
-          },
-          create: {
-            callId: call.id,
-            candidateId: call.candidateId,
-            overallScore: analysis.overallScore,
-            isQualified: analysis.isQualified,
-            reason: analysis.reason,
-            detectedTechStack: analysis.detectedTechStack,
-            extractedYearsExp: analysis.extractedYearsExp,
-            extractedCurrentRole: analysis.extractedCurrentRole,
-          },
-        })
-
-        await prisma.candidate.update({
-          where: { id: call.candidateId },
-          data: {
-            status: analysis.isQualified ? 'QUALIFIED' : 'DISQUALIFIED',
-            latestScore: analysis.overallScore,
-            latestSummary: payload.summary || undefined,
-          },
-        })
-
-        console.log(`[Webhook] Scoring done for call ${call.id}: score=${analysis.overallScore}, qualified=${analysis.isQualified}`)
-      } else if (isFailed) {
+      if (isFailed || isNoAnswer) {
         await prisma.candidate.update({
           where: { id: call.candidateId },
           data: { status: 'NO_ANSWER' },

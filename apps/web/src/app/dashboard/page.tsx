@@ -15,10 +15,9 @@ import {
   Phone,
   Users,
   Clock,
-  DollarSign,
   PhoneCall,
   Bot,
-  TrendingUp,
+  CheckCircle2,
 } from 'lucide-react'
 import { DashboardLayout } from '@/app/dashboard-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,31 +25,29 @@ import { CallStatusBadge } from '@/components/shared/StatusBadge'
 import { analyticsApi } from '@/lib/api-client'
 
 interface DashboardData {
-  stats: {
+  metrics: {
     totalCalls: number
-    qualifiedPercent: number
-    avgDurationSeconds: number
+    completedCalls: number
+    avgDuration: number
     totalCost: number
     callsToday: number
     activeAgents: number
+    totalCandidates: number
   }
-  pipeline: {
-    PENDING: number
-    SCHEDULED: number
-    CALLED: number
-    QUALIFIED: number
-    DISQUALIFIED: number
-    NO_ANSWER: number
+  funnel: {
+    pending: number
+    scheduled: number
+    called: number
+    noAnswer: number
   }
   recentCalls: Array<{
     id: string
     candidateName: string
     status: string
-    durationSeconds: number
-    overallScore: number | null
-    createdAt: string
+    duration: number | null
+    initiatedAt: string
   }>
-  techFrequency: Array<{ tech: string; count: number }>
+  techStackFrequency: Array<{ tech: string; count: number }>
 }
 
 function StatCard({
@@ -112,21 +109,17 @@ function formatDate(iso: string): string {
 }
 
 const PIPELINE_COLORS: Record<string, string> = {
-  PENDING: '#9ca3af',
-  SCHEDULED: '#3b82f6',
-  CALLED: '#a855f7',
-  QUALIFIED: '#10b981',
-  DISQUALIFIED: '#ef4444',
-  NO_ANSWER: '#f59e0b',
+  pending: '#9ca3af',
+  scheduled: '#3b82f6',
+  called: '#a855f7',
+  noAnswer: '#f59e0b',
 }
 
 const PIPELINE_LABELS: Record<string, string> = {
-  PENDING: 'Pending',
-  SCHEDULED: 'Scheduled',
-  CALLED: 'Called',
-  QUALIFIED: 'Qualified',
-  DISQUALIFIED: 'Disqualified',
-  NO_ANSWER: 'No Answer',
+  pending: 'Pending',
+  scheduled: 'Scheduled',
+  called: 'Called',
+  noAnswer: 'No Answer',
 }
 
 export default function DashboardPage() {
@@ -135,17 +128,17 @@ export default function DashboardPage() {
     queryFn: () => analyticsApi.dashboard(),
   })
 
-  const stats = data?.stats
+  const metrics = data?.metrics
 
-  const pipelineData = data?.pipeline
-    ? Object.entries(data.pipeline).map(([key, count]) => ({
+  const pipelineData = data?.funnel
+    ? Object.entries(data.funnel).map(([key, count]) => ({
         name: PIPELINE_LABELS[key] ?? key,
         count,
         key,
       }))
     : []
 
-  const techData = data?.techFrequency ?? []
+  const techData = data?.techStackFrequency ?? []
   const recentCalls = data?.recentCalls ?? []
 
   return (
@@ -156,55 +149,22 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-500">Overview of your HR screening pipeline</p>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {isLoading ? (
             Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : (
             <>
-              <StatCard
-                title="Total Calls"
-                value={stats?.totalCalls ?? 0}
-                icon={Phone}
-                color="bg-blue-500"
-              />
-              <StatCard
-                title="Qualified %"
-                value={`${stats?.qualifiedPercent?.toFixed(1) ?? 0}%`}
-                icon={TrendingUp}
-                color="bg-emerald-500"
-              />
-              <StatCard
-                title="Avg Duration"
-                value={formatDuration(stats?.avgDurationSeconds ?? 0)}
-                icon={Clock}
-                color="bg-purple-500"
-              />
-              {/* <StatCard
-                title="Total Cost"
-                value={`$${(stats?.totalCost ?? 0).toFixed(2)}`}
-                icon={DollarSign}
-                color="bg-orange-500"
-              /> */}
-              <StatCard
-                title="Calls Today"
-                value={stats?.callsToday ?? 0}
-                icon={PhoneCall}
-                color="bg-cyan-500"
-              />
-              <StatCard
-                title="Active Agents"
-                value={stats?.activeAgents ?? 0}
-                icon={Bot}
-                color="bg-indigo-500"
-              />
+              <StatCard title="Total Calls" value={metrics?.totalCalls ?? 0} icon={Phone} color="bg-blue-500" />
+              <StatCard title="Completed Calls" value={metrics?.completedCalls ?? 0} icon={CheckCircle2} color="bg-emerald-500" />
+              <StatCard title="Avg Duration" value={formatDuration(metrics?.avgDuration ?? 0)} icon={Clock} color="bg-orange-500" />
+              <StatCard title="Calls Today" value={metrics?.callsToday ?? 0} icon={PhoneCall} color="bg-cyan-500" />
+              <StatCard title="Active Agents" value={metrics?.activeAgents ?? 0} icon={Bot} color="bg-indigo-500" />
+              <StatCard title="Candidates" value={metrics?.totalCandidates ?? 0} icon={Users} color="bg-slate-500" />
             </>
           )}
         </div>
 
-        {/* Charts Row */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Pipeline Funnel */}
           <Card>
             <CardHeader>
               <CardTitle>Candidate Pipeline</CardTitle>
@@ -221,9 +181,7 @@ export default function DashboardPage() {
                     const pct = (item.count / max) * 100
                     return (
                       <div key={item.key} className="flex items-center gap-3">
-                        <span className="w-24 shrink-0 text-right text-sm text-gray-600">
-                          {item.name}
-                        </span>
+                        <span className="w-24 shrink-0 text-right text-sm text-gray-600">{item.name}</span>
                         <div className="flex-1 h-6 rounded bg-gray-100 overflow-hidden">
                           <div
                             className="h-full rounded transition-all duration-500"
@@ -233,9 +191,7 @@ export default function DashboardPage() {
                             }}
                           />
                         </div>
-                        <span className="w-10 shrink-0 text-sm font-semibold text-gray-700">
-                          {item.count}
-                        </span>
+                        <span className="w-10 shrink-0 text-sm font-semibold text-gray-700">{item.count}</span>
                       </div>
                     )
                   })}
@@ -244,7 +200,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Tech Stack Frequency */}
           <Card>
             <CardHeader>
               <CardTitle>Tech Stack Frequency</CardTitle>
@@ -258,11 +213,7 @@ export default function DashboardPage() {
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={techData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis
-                      dataKey="tech"
-                      tick={{ fontSize: 12 }}
-                      tickLine={false}
-                    />
+                    <XAxis dataKey="tech" tick={{ fontSize: 12 }} tickLine={false} />
                     <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
                     <Tooltip />
                     <Bar dataKey="count" radius={[4, 4, 0, 0]}>
@@ -280,7 +231,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Recent Calls */}
         <Card>
           <CardHeader>
             <CardTitle>Recent Calls</CardTitle>
@@ -302,7 +252,6 @@ export default function DashboardPage() {
                       <th className="px-6 py-3 font-medium text-gray-500">Candidate</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Status</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Duration</th>
-                      <th className="px-6 py-3 font-medium text-gray-500">Score</th>
                       <th className="px-6 py-3 font-medium text-gray-500">Date</th>
                     </tr>
                   </thead>
@@ -313,35 +262,14 @@ export default function DashboardPage() {
                         className="hover:bg-gray-50 cursor-pointer"
                         onClick={() => (window.location.href = `/calls/${call.id}`)}
                       >
-                        <td className="px-6 py-3 font-medium text-gray-900">
-                          {call.candidateName}
-                        </td>
+                        <td className="px-6 py-3 font-medium text-gray-900">{call.candidateName}</td>
                         <td className="px-6 py-3">
                           <CallStatusBadge status={call.status} />
                         </td>
                         <td className="px-6 py-3 text-gray-600">
-                          {call.durationSeconds ? formatDuration(call.durationSeconds) : '—'}
+                          {call.duration ? formatDuration(call.duration) : '—'}
                         </td>
-                        <td className="px-6 py-3">
-                          {call.overallScore != null ? (
-                            <span
-                              className={`font-semibold ${
-                                call.overallScore >= 70
-                                  ? 'text-emerald-600'
-                                  : call.overallScore >= 50
-                                  ? 'text-yellow-600'
-                                  : 'text-red-600'
-                              }`}
-                            >
-                              {call.overallScore}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td className="px-6 py-3 text-gray-500">
-                          {formatDate(call.createdAt)}
-                        </td>
+                        <td className="px-6 py-3 text-gray-500">{formatDate(call.initiatedAt)}</td>
                       </tr>
                     ))}
                   </tbody>

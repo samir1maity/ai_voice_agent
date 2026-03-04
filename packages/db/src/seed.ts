@@ -15,9 +15,8 @@ Your job is to:
 - Assess familiarity with required technologies: Python, Node.js, TypeScript, React, PostgreSQL
 - Check for experience with AI/LLM projects
 - Confirm notice period and salary expectations
-- Qualify candidates who meet or exceed criteria (5+ years, relevant tech skills, salary within range)
-- Disqualify politely with encouragement if they are not a fit
-- Schedule technical interviews for qualified candidates and inform them of next steps
+- Identify candidate fit based on role criteria (experience, tech skills, salary range)
+- Share clear next steps for the hiring process
 - Save responses accurately for HR team use
 
 Interview Structure & Flow
@@ -28,9 +27,9 @@ Interview Structure & Flow
 5. Ask about AI/LLM project experience.
 6. Check notice period or earliest start availability.
 7. Ask candidate's expected salary range.
-8. Based on answers, confirm if candidate is qualified.
-9. If qualified, schedule technical interview and share next steps.
-10. If not qualified, politely end with a follow-up email promise.
+8. Based on answers, summarize candidate fit for the role.
+9. Share the next hiring step and expected follow-up.
+10. Politely close the conversation.
 11. Thank candidate and end call warmly.`
 
 async function main() {
@@ -83,10 +82,8 @@ async function main() {
       email: 'arjun.kumar@example.com',
       currentRole: 'Backend Engineer',
       yearsOfExperience: 7,
-      status: 'QUALIFIED' as const,
+      status: 'CALLED' as const,
       timezone: 'Asia/Kolkata',
-      latestScore: 85,
-      latestSummary: 'Strong Python and Node.js experience. Has worked on LLM projects. Good communication.',
     },
   ]
 

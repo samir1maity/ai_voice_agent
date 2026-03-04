@@ -2,8 +2,6 @@ export type CandidateStatus =
   | 'PENDING'
   | 'SCHEDULED'
   | 'CALLED'
-  | 'QUALIFIED'
-  | 'DISQUALIFIED'
   | 'NO_ANSWER'
 
 export interface Candidate {
@@ -18,8 +16,6 @@ export interface Candidate {
   timezone: string
   notes?: string | null
   importBatchId?: string | null
-  latestScore?: number | null
-  latestSummary?: string | null
   createdAt: string
   updatedAt: string
   calls?: import('./call.types').Call[]

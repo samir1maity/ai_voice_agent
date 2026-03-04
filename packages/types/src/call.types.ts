@@ -9,9 +9,6 @@ export interface CallAnalytic {
   id: string
   callId: string
   candidateId: string
-  overallScore?: number | null
-  isQualified?: boolean | null
-  reason?: string | null
   detectedTechStack: string[]
   extractedYearsExp?: number | null
   extractedCurrentRole?: string | null
@@ -69,10 +66,7 @@ export interface ScreeningReport {
     provider?: string | null
   }
   screening: {
-    overallScore?: number | null
-    qualified?: boolean | null
     techStack: string[]
-    reason?: string | null
   }
   transcript: TranscriptTurn[]
   summary?: string | null

@@ -10,6 +10,7 @@ export const candidatesController = {
       const limit = parseInt(req.query.limit as string) || 20
       const skip = (page - 1) * limit
       const { status, search } = req.query
+      console.log('req.query', req.query)
 
       const where: Record<string, unknown> = {}
       if (status) {
@@ -27,7 +28,19 @@ export const candidatesController = {
       const [candidates, total] = await Promise.all([
         prisma.candidate.findMany({
           where,
-          include: { _count: { select: { calls: true } } },
+          include: {
+            _count: { select: { calls: true } },
+            calls: {
+              select: { initiatedAt: true },
+              orderBy: { initiatedAt: 'desc' },
+              take: 1,
+            },
+            callAnalytics: {
+              select: { detectedTechStack: true, extractedYearsExp: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
           orderBy: { createdAt: 'desc' },
           skip,
           take: limit,
@@ -35,7 +48,21 @@ export const candidatesController = {
         prisma.candidate.count({ where }),
       ])
 
-      res.json({ success: true, data: candidates, total, page, limit, totalPages: Math.ceil(total / limit) })
+      const candidatesWithLastCall = candidates.map((candidate) => ({
+        ...candidate,
+        lastCallDate: candidate.calls[0]?.initiatedAt || null,
+        mentionedTechStack: candidate.callAnalytics[0]?.detectedTechStack || [],
+        extractedYearsExp: candidate.callAnalytics[0]?.extractedYearsExp ?? null,
+      }))
+
+      res.json({
+        success: true,
+        data: candidatesWithLastCall,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      })
     } catch (err) {
       next(err)
     }
@@ -92,13 +119,18 @@ export const candidatesController = {
       const existing = await prisma.candidate.findUnique({ where: { id: req.params.id } })
       if (!existing) throw new AppError(404, 'Candidate not found')
 
-      // Soft delete by changing status
-      await prisma.candidate.update({
-        where: { id: req.params.id },
-        data: { status: 'DISQUALIFIED' },
-      })
-      res.json({ success: true, message: 'Candidate removed' })
-    } catch (err) {
+      await prisma.$transaction([
+        prisma.callAnalytic.deleteMany({ where: { candidateId: req.params.id } }),
+        prisma.call.deleteMany({ where: { candidateId: req.params.id } }),
+        prisma.candidate.delete({ where: { id: req.params.id } }),
+      ])
+
+      res.json({ success: true, message: 'Candidate deleted' })
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2003') {
+        next(new AppError(409, 'Candidate cannot be deleted because related records exist'))
+        return
+      }
       next(err)
     }
   },

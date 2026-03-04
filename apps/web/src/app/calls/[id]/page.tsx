@@ -1,25 +1,14 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import {
-  ArrowLeft,
-  RefreshCw,
-  Printer,
-  Loader2,
-  Phone,
-  Clock,
-  DollarSign,
-  Calendar,
-  User,
-} from 'lucide-react'
+import { ArrowLeft, Phone, Clock, DollarSign, Calendar, User } from 'lucide-react'
 import { DashboardLayout } from '@/app/dashboard-layout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CallStatusBadge } from '@/components/shared/StatusBadge'
-import { ScreeningScore } from '@/components/calls/ScreeningScore'
-import { TechStackTags } from '@/components/calls/TechStackTags'
 import { TranscriptViewer } from '@/components/calls/TranscriptViewer'
+import { TechStackTags } from '@/components/calls/TechStackTags'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { useCallPolling } from '@/hooks/use-call-polling'
 import { callsApi } from '@/lib/api-client'
@@ -28,7 +17,6 @@ import { toast } from '@/hooks/use-toast'
 interface CallDetail {
   id: string
   status: string
-  candidateId?: string
   duration?: number
   cost?: number
   summary?: string | null
@@ -37,10 +25,9 @@ interface CallDetail {
   candidate?: { id: string; name: string; phone: string }
   agent?: { id: string; name: string }
   analytics?: {
-    overallScore?: number | null
-    isQualified?: boolean | null
-    reason?: string | null
     detectedTechStack?: string[]
+    extractedYearsExp?: number | null
+    extractedCurrentRole?: string | null
   } | null
 }
 
@@ -65,18 +52,15 @@ function formatDuration(s?: number) {
 
 function formatCost(cost?: number) {
   if (cost == null) return '—'
-  return `$${cost.toFixed(4)}`
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cost)
 }
 
-function MetaItem({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string
-}) {
+function MetaItem({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
     <div className="flex items-center gap-2 text-sm">
       <Icon className="h-4 w-4 text-gray-400" />
@@ -109,32 +93,9 @@ export default function CallDetailPage({ params }: PageProps) {
     call?.status ?? 'INITIATED',
     (finalStatus) => {
       queryClient.invalidateQueries({ queryKey: ['call', id] })
-      toast({
-        title: 'Call ended',
-        description: `Call status: ${finalStatus}`,
-      })
+      toast({ title: 'Call ended', description: `Call status: ${finalStatus}` })
     }
   )
-
-  const analyzeMutation = useMutation({
-    mutationFn: () => callsApi.analyze(id),
-    onSuccess: () => {
-      toast({ title: 'Analysis complete', description: 'Scores have been updated.' })
-      queryClient.invalidateQueries({ queryKey: ['call', id] })
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Analysis failed', description: err.message, variant: 'destructive' })
-    },
-  })
-
-  const handleExport = async () => {
-    try {
-      await callsApi.getReport(id)
-      window.print()
-    } catch (err) {
-      toast({ title: 'Export failed', description: 'Could not generate report.', variant: 'destructive' })
-    }
-  }
 
   if (isLoading) return <DashboardLayout><LoadingSpinner /></DashboardLayout>
   if (!call)
@@ -176,76 +137,22 @@ export default function CallDetailPage({ params }: PageProps) {
               </div>
             </div>
           </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExport}
-              className="gap-1.5"
-            >
-              <Printer className="h-4 w-4" />
-              Export Report
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => analyzeMutation.mutate()}
-              disabled={analyzeMutation.isPending}
-              className="gap-1.5"
-            >
-              {analyzeMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Re-analyze
-            </Button>
-          </div>
         </div>
 
         {/* Candidate Link */}
-        {call.candidate && (
+        {/* {call.candidate && (
           <div className="flex items-center gap-2 rounded-lg border bg-gray-50 px-4 py-3 text-sm">
             <User className="h-4 w-4 text-gray-400" />
             <span className="text-gray-500">Candidate profile:</span>
-            <Link
-              href={`/candidates/${call.candidate.id}`}
-              className="font-medium text-blue-600 hover:underline"
-            >
+            <Link href={`/candidates/${call.candidate.id}`} className="font-medium text-blue-600 hover:underline">
               {call.candidate.name}
             </Link>
           </div>
-        )}
+        )} */}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Score Column */}
+          {/* Left column: summary */}
           <div className="space-y-6 lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle>Screening Score</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScreeningScore
-                  overallScore={call.analytics?.overallScore}
-                  technicalScore={null}
-                  experienceScore={null}
-                  communicationScore={null}
-                  isQualified={call.analytics?.isQualified}
-                />
-              </CardContent>
-            </Card>
-
-            {call.analytics?.detectedTechStack && call.analytics.detectedTechStack.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Detected Tech Stack</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <TechStackTags techStack={call.analytics.detectedTechStack} />
-                </CardContent>
-              </Card>
-            )}
-
             {call.summary && (
               <Card>
                 <CardHeader>
@@ -256,9 +163,29 @@ export default function CallDetailPage({ params }: PageProps) {
                 </CardContent>
               </Card>
             )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Call Insights</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">Tech Stack Mentioned</p>
+                  <TechStackTags techStack={call.analytics?.detectedTechStack ?? []} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-700">Extracted Years of Experience</p>
+                  <p className="text-sm text-gray-700">
+                    {call.analytics?.extractedYearsExp != null
+                      ? `${call.analytics.extractedYearsExp} years`
+                      : '—'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Transcript Column */}
+          {/* Transcript */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>

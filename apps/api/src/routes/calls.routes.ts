@@ -10,7 +10,5 @@ router.post('/', validate(initiateCallSchema), callsController.initiate)
 router.get('/:id', callsController.get)
 router.get('/:id/status', callsController.getStatus)
 router.get('/:id/transcript', callsController.getTranscript)
-router.post('/:id/analyze', callsController.analyze)
-router.get('/:id/report', callsController.getReport)
 
 export default router

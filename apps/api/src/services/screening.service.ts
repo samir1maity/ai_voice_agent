@@ -5,9 +5,6 @@ import type { TranscriptTurn } from '@ai-voice-agent/types'
 const genai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY })
 
 export interface ScreeningResult {
-  overallScore: number          // 0–100
-  isQualified: boolean
-  reason: string                // qualification or disqualification reason
   detectedTechStack: string[]   // e.g. ['Python', 'Node.js', 'React']
   extractedYearsExp: number | null
   extractedCurrentRole: string | null
@@ -22,17 +19,12 @@ Transcript:
 
 Return ONLY valid JSON with this exact shape:
 {
-  "overallScore": <integer 0-100>,
-  "isQualified": <boolean>,
-  "reason": "<one paragraph: why qualified or disqualified>",
   "detectedTechStack": ["<tech1>", "<tech2>", ...],
   "extractedYearsExp": <integer or null>,
   "extractedCurrentRole": "<string or null>"
 }
 
-Scoring guide:
-- 0–100 overall score based on technical depth, relevant experience, and communication quality
-- Qualified if score >= 60 and candidate has 3+ years of experience
+Extraction guide:
 - detectedTechStack: list any technologies, frameworks, or tools the candidate mentioned
 - extractedYearsExp: total years of professional experience mentioned, or null if not stated
 - extractedCurrentRole: their current job title if mentioned, or null`

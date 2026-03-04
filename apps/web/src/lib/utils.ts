@@ -31,17 +31,3 @@ export function formatDateTime(dateStr?: string | null): string {
     hour: '2-digit', minute: '2-digit',
   })
 }
-
-export function getScoreColor(score?: number | null): string {
-  if (!score) return 'text-gray-400'
-  if (score >= 70) return 'text-emerald-500'
-  if (score >= 50) return 'text-yellow-500'
-  return 'text-red-500'
-}
-
-export function getScoreBg(score?: number | null): string {
-  if (!score) return 'bg-gray-100'
-  if (score >= 70) return 'bg-emerald-50 border-emerald-200'
-  if (score >= 50) return 'bg-yellow-50 border-yellow-200'
-  return 'bg-red-50 border-red-200'
-}

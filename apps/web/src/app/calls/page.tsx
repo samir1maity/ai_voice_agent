@@ -70,7 +70,12 @@ function formatDuration(s?: number) {
 
 function formatCost(cost?: number) {
   if (cost == null) return '—'
-  return `$${cost.toFixed(4)}`
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cost)
 }
 
 export default function CallsPage() {

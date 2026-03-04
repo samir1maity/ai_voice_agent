@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
-import { CandidateStatusBadge } from '@/components/shared/StatusBadge'
 import { CallButton } from '@/components/calls/CallButton'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
@@ -38,7 +37,7 @@ interface Candidate {
   currentRole?: string
   yearsOfExperience?: number
   status: string
-  latestScore?: number | null
+  _count?: { calls: number }
   lastCallDate?: string | null
 }
 
@@ -57,8 +56,6 @@ const STATUS_OPTIONS = [
   { value: 'PENDING', label: 'Pending' },
   { value: 'SCHEDULED', label: 'Scheduled' },
   { value: 'CALLED', label: 'Called' },
-  { value: 'QUALIFIED', label: 'Qualified' },
-  { value: 'DISQUALIFIED', label: 'Disqualified' },
   { value: 'NO_ANSWER', label: 'No Answer' },
 ]
 
@@ -262,8 +259,7 @@ export default function CandidatesPage() {
                       <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Current Role</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Exp (yrs)</th>
-                      <th className="px-4 py-3 font-medium text-gray-500">Status</th>
-                      <th className="px-4 py-3 font-medium text-gray-500">Score</th>
+                      <th className="px-4 py-3 font-medium text-gray-500">Calls</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Last Call</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Actions</th>
                     </tr>
@@ -294,26 +290,7 @@ export default function CandidatesPage() {
                         <td className="px-4 py-3 text-gray-600">
                           {candidate.yearsOfExperience ?? '—'}
                         </td>
-                        <td className="px-4 py-3">
-                          <CandidateStatusBadge status={candidate.status} />
-                        </td>
-                        <td className="px-4 py-3">
-                          {candidate.latestScore != null ? (
-                            <span
-                              className={`font-semibold ${
-                                candidate.latestScore >= 70
-                                  ? 'text-emerald-600'
-                                  : candidate.latestScore >= 50
-                                  ? 'text-yellow-600'
-                                  : 'text-red-600'
-                              }`}
-                            >
-                              {candidate.latestScore}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                        <td className="px-4 py-3 text-gray-600">{candidate._count?.calls ?? 0}</td>
                         <td className="px-4 py-3 text-gray-500">
                           {formatDate(candidate.lastCallDate)}
                         </td>

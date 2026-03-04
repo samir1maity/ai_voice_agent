@@ -1,46 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ai-voice-agent/db'
 import { bolnaService } from '../services/bolna.service'
-import { screeningService } from '../services/screening.service'
 import { AppError } from '../middleware/error.middleware'
-import type { ScreeningReport } from '@ai-voice-agent/types'
-
-async function runPostCallProcessing(callId: string, candidateId: string, transcript: string, summary: string | null) {
-  const analysis = await screeningService.analyze(transcript, summary || '')
-
-  await prisma.callAnalytic.upsert({
-    where: { callId },
-    update: {
-      overallScore: analysis.overallScore,
-      isQualified: analysis.isQualified,
-      reason: analysis.reason,
-      detectedTechStack: analysis.detectedTechStack,
-      extractedYearsExp: analysis.extractedYearsExp,
-      extractedCurrentRole: analysis.extractedCurrentRole,
-    },
-    create: {
-      callId,
-      candidateId,
-      overallScore: analysis.overallScore,
-      isQualified: analysis.isQualified,
-      reason: analysis.reason,
-      detectedTechStack: analysis.detectedTechStack,
-      extractedYearsExp: analysis.extractedYearsExp,
-      extractedCurrentRole: analysis.extractedCurrentRole,
-    },
-  })
-
-  await prisma.candidate.update({
-    where: { id: candidateId },
-    data: {
-      status: analysis.isQualified ? 'QUALIFIED' : 'DISQUALIFIED',
-      latestScore: analysis.overallScore,
-      latestSummary: summary || undefined,
-    },
-  })
-
-  console.log(`[Calls] Scoring done for call ${callId}: score=${analysis.overallScore}, qualified=${analysis.isQualified}`)
-}
 
 export const callsController = {
   async list(req: Request, res: Response, next: NextFunction) {
@@ -61,7 +22,6 @@ export const callsController = {
           include: {
             candidate: { select: { id: true, name: true, phone: true } },
             agent: { select: { id: true, name: true } },
-            analytics: true,
           },
           orderBy: { createdAt: 'desc' },
           skip,
@@ -197,9 +157,7 @@ export const callsController = {
             select: { id: true, status: true, bolnaExecutionId: true, duration: true, completedAt: true, candidateId: true },
           })
 
-          if (isCompleted && transcript) {
-            await runPostCallProcessing(call.id, updated.candidateId, transcript, summary)
-          } else if (isFailed || isNoAnswer) {
+          if (isFailed || isNoAnswer) {
             await prisma.candidate.update({
               where: { id: updated.candidateId },
               data: { status: 'NO_ANSWER' },
@@ -226,70 +184,10 @@ export const callsController = {
       })
       if (!call) throw new AppError(404, 'Call not found')
 
-      const turns = call.transcript ? screeningService.parseTranscript(call.transcript) : []
-      res.json({ success: true, data: { turns, summary: call.summary, raw: call.transcript } })
+      res.json({ success: true, data: { transcript: call.transcript, summary: call.summary } })
     } catch (err) {
       next(err)
     }
   },
 
-  async analyze(req: Request, res: Response, next: NextFunction) {
-    try {
-      const call = await prisma.call.findUnique({
-        where: { id: req.params.id },
-        include: { analytics: true },
-      })
-      if (!call) throw new AppError(404, 'Call not found')
-      if (!call.transcript) throw new AppError(400, 'Call has no transcript to analyze')
-
-      await runPostCallProcessing(call.id, call.candidateId, call.transcript, call.summary)
-
-      const analytics = await prisma.callAnalytic.findUnique({ where: { callId: call.id } })
-      res.json({ success: true, data: analytics })
-    } catch (err) {
-      next(err)
-    }
-  },
-
-  async getReport(req: Request, res: Response, next: NextFunction) {
-    try {
-      const call = await prisma.call.findUnique({
-        where: { id: req.params.id },
-        include: { candidate: true, agent: true, analytics: true },
-      })
-      if (!call) throw new AppError(404, 'Call not found')
-
-      const turns = call.transcript ? screeningService.parseTranscript(call.transcript) : []
-
-      const report: ScreeningReport = {
-        reportGeneratedAt: new Date().toISOString(),
-        candidate: {
-          name: call.candidate.name,
-          email: call.candidate.email,
-          phone: call.candidate.phone,
-          currentRole: call.candidate.currentRole,
-          yearsOfExperience: call.candidate.yearsOfExperience,
-        },
-        call: {
-          duration: call.duration,
-          cost: call.cost,
-          initiatedAt: call.initiatedAt.toISOString(),
-          completedAt: call.completedAt?.toISOString(),
-          provider: call.provider,
-        },
-        screening: {
-          overallScore: call.analytics?.overallScore,
-          qualified: call.analytics?.isQualified,
-          techStack: call.analytics?.detectedTechStack || [],
-          reason: call.analytics?.reason,
-        },
-        transcript: turns,
-        summary: call.summary,
-      }
-
-      res.json({ success: true, data: report })
-    } catch (err) {
-      next(err)
-    }
-  },
 }
