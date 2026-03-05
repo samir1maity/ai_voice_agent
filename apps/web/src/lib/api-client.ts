@@ -1,11 +1,39 @@
 import axios from 'axios'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1'
+const CLIENT_ID_STORAGE_KEY = 'ai-voice-agent-client-id'
+
+function createClientId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `web-${crypto.randomUUID()}`
+  }
+  return `web-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function getOrCreateClientId() {
+  if (typeof window === 'undefined') return null
+
+  const existing = window.localStorage.getItem(CLIENT_ID_STORAGE_KEY)
+  if (existing) return existing
+
+  const created = createClientId()
+  window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, created)
+  return created
+}
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
+})
+
+apiClient.interceptors.request.use((config) => {
+  const clientId = getOrCreateClientId()
+  if (!clientId) return config
+
+  config.headers = config.headers || {}
+  ;(config.headers as Record<string, string>)['x-client-id'] = clientId
+  return config
 })
 
 export function getErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
@@ -57,6 +85,10 @@ apiClient.interceptors.response.use(
 
 // ─── Agent APIs ───────────────────────────────────────────────────────────────
 export const agentsApi = {
+  getWorkspace: () => apiClient.get('/agents/workspace').then((r) => r.data.data),
+  setWorkspaceApiKey: (apiKey: string) =>
+    apiClient.put('/agents/workspace/api-key', { apiKey }).then((r) => r.data.data),
+  deleteWorkspaceApiKey: () => apiClient.delete('/agents/workspace/api-key').then((r) => r.data.data),
   list: () => apiClient.get('/agents').then((r) => r.data.data),
   get: (id: string) => apiClient.get(`/agents/${id}`).then((r) => r.data.data),
   create: (data: unknown) => apiClient.post('/agents', data).then((r) => r.data.data),

@@ -10,3 +10,7 @@ export const createAgentSchema = z.object({
 })
 
 export const updateAgentSchema = createAgentSchema.partial()
+
+export const workspaceApiKeySchema = z.object({
+  apiKey: z.string().min(1).max(500),
+})

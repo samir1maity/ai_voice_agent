@@ -35,6 +35,12 @@ Interview Structure & Flow
 async function main() {
   console.log('🌱 Seeding database...')
 
+  const workspace = await prisma.workspace.upsert({
+    where: { clientId: 'seed-client' },
+    update: {},
+    create: { clientId: 'seed-client' },
+  })
+
   // Create a sample agent
   const agent = await prisma.agent.upsert({
     where: { id: 'seed-agent-001' },
@@ -48,6 +54,7 @@ async function main() {
       voice: 'FaqthkZu1EWxXxUFbAfb',
       model: 'gpt-4o-mini',
       maxDuration: 600,
+      workspaceId: workspace.id,
     },
   })
 

@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ai-voice-agent/db'
-import { bolnaService } from '../services/bolna.service'
+import { buildAgentPayload, createBolnaService } from '../services/bolna.service'
 import { env } from '../config/env'
 import { AppError } from '../middleware/error.middleware'
+import { getWorkspace, getWorkspaceWithApiKey, maskApiKey } from '../lib/workspace'
 
 const DEFAULT_VOICE_ID = 'FaqthkZu1EWxXxUFbAfb'
 const DEFAULT_MODEL = 'gpt-4o-mini'
@@ -62,9 +63,79 @@ function mapBolnaAgentData(agent: Record<string, unknown>, fallbackBolnaAgentId?
 }
 
 export const agentsController = {
+  async getWorkspace(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workspace = await getWorkspace(req)
+      res.json({
+        success: true,
+        data: {
+          clientId: workspace.clientId,
+          hasApiKey: Boolean(workspace.bolnaApiKey),
+          maskedApiKey: maskApiKey(workspace.bolnaApiKey),
+          updatedAt: workspace.updatedAt,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  },
+
+  async setApiKey(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workspace = await getWorkspace(req)
+      const apiKey = String(req.body.apiKey || '').trim()
+
+      if (!apiKey) {
+        throw new AppError(400, 'apiKey is required')
+      }
+
+      const updatedWorkspace = await prisma.workspace.update({
+        where: { id: workspace.id },
+        data: { bolnaApiKey: apiKey },
+      })
+
+      res.json({
+        success: true,
+        data: {
+          clientId: updatedWorkspace.clientId,
+          hasApiKey: true,
+          maskedApiKey: maskApiKey(updatedWorkspace.bolnaApiKey),
+          updatedAt: updatedWorkspace.updatedAt,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  },
+
+  async removeApiKey(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workspace = await getWorkspace(req)
+
+      const updatedWorkspace = await prisma.workspace.update({
+        where: { id: workspace.id },
+        data: { bolnaApiKey: null },
+      })
+
+      res.json({
+        success: true,
+        data: {
+          clientId: updatedWorkspace.clientId,
+          hasApiKey: false,
+          maskedApiKey: null,
+          updatedAt: updatedWorkspace.updatedAt,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  },
+
   async list(req: Request, res: Response, next: NextFunction) {
     try {
+      const workspace = await getWorkspace(req)
       const agents = await prisma.agent.findMany({
+        where: { workspaceId: workspace.id },
         orderBy: { createdAt: 'desc' },
         include: { _count: { select: { calls: true } } },
       })
@@ -76,8 +147,9 @@ export const agentsController = {
 
   async get(req: Request, res: Response, next: NextFunction) {
     try {
-      const agent = await prisma.agent.findUnique({
-        where: { id: req.params.id },
+      const workspace = await getWorkspace(req)
+      const agent = await prisma.agent.findFirst({
+        where: { id: req.params.id, workspaceId: workspace.id },
         include: { _count: { select: { calls: true } } },
       })
       if (!agent) throw new AppError(404, 'Agent not found')
@@ -89,24 +161,40 @@ export const agentsController = {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
+      const workspace = await getWorkspace(req)
       const { name, description, prompt, voice, model, maxDuration } = req.body
 
       const webhookUrl = `${env.WEBHOOK_BASE_URL}/api/v1/webhook/bolna`
-      const bolnaPayload = bolnaService.buildAgentPayload(name, prompt, webhookUrl, voice, model)
+      const payloadVoice = voice || DEFAULT_VOICE_ID
+      const payloadModel = model || DEFAULT_MODEL
+      const bolnaPayload = buildAgentPayload(name, prompt, webhookUrl, payloadVoice, payloadModel)
 
       let bolnaAgentId: string | undefined
       let status: 'ACTIVE' | 'SYNCING' = 'SYNCING'
 
-      try {
-        const bolnaRes = await bolnaService.createAgent(bolnaPayload)
-        bolnaAgentId = bolnaRes.agent_id
-        status = 'ACTIVE'
-      } catch (bolnaErr) {
-        console.warn('[Agent Create] Bolna sync failed, saving locally only:', bolnaErr)
+      if (workspace.bolnaApiKey) {
+        const bolnaService = createBolnaService(workspace.bolnaApiKey)
+        try {
+          const bolnaRes = await bolnaService.createAgent(bolnaPayload)
+          bolnaAgentId = bolnaRes.agent_id
+          status = 'ACTIVE'
+        } catch (bolnaErr) {
+          console.warn('[Agent Create] Bolna sync failed, saving locally only:', bolnaErr)
+        }
       }
 
       const agent = await prisma.agent.create({
-        data: { name, description, prompt, voice, model, maxDuration, bolnaAgentId, status },
+        data: {
+          workspaceId: workspace.id,
+          name,
+          description,
+          prompt,
+          voice: payloadVoice,
+          model: payloadModel,
+          maxDuration,
+          bolnaAgentId,
+          status,
+        },
       })
 
       res.status(201).json({ success: true, data: agent })
@@ -117,20 +205,24 @@ export const agentsController = {
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const existing = await prisma.agent.findUnique({ where: { id: req.params.id } })
+      const workspace = await getWorkspace(req)
+      const existing = await prisma.agent.findFirst({
+        where: { id: req.params.id, workspaceId: workspace.id },
+      })
       if (!existing) throw new AppError(404, 'Agent not found')
 
       const { name, description, prompt, voice, model, maxDuration } = req.body
 
-      if (existing.bolnaAgentId && (prompt || name)) {
+      if (existing.bolnaAgentId && (prompt || name) && workspace.bolnaApiKey) {
         const webhookUrl = `${env.WEBHOOK_BASE_URL}/api/v1/webhook/bolna`
-        const bolnaPayload = bolnaService.buildAgentPayload(
+        const bolnaPayload = buildAgentPayload(
           name || existing.name,
           prompt || existing.prompt,
           webhookUrl,
           voice || existing.voice,
           model || existing.model
         )
+        const bolnaService = createBolnaService(workspace.bolnaApiKey)
         try {
           await bolnaService.updateAgent(existing.bolnaAgentId, bolnaPayload)
         } catch (err) {
@@ -151,7 +243,8 @@ export const agentsController = {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const agent = await prisma.agent.findUnique({ where: { id: req.params.id } })
+      const workspace = await getWorkspace(req)
+      const agent = await prisma.agent.findFirst({ where: { id: req.params.id, workspaceId: workspace.id } })
       if (!agent) throw new AppError(404, 'Agent not found')
 
       await prisma.agent.update({
@@ -167,13 +260,15 @@ export const agentsController = {
 
   async sync(req: Request, res: Response, next: NextFunction) {
     try {
-      const agent = await prisma.agent.findUnique({ where: { id: req.params.id } })
+      const workspace = await getWorkspaceWithApiKey(req)
+      const agent = await prisma.agent.findFirst({ where: { id: req.params.id, workspaceId: workspace.id } })
       if (!agent) throw new AppError(404, 'Agent not found')
 
       if (!agent.bolnaAgentId) {
         throw new AppError(400, 'Agent has no Bolna ID. Fetch from Bolna first, then sync.')
       }
 
+      const bolnaService = createBolnaService(workspace.bolnaApiKey || undefined)
       const bolnaAgentResponse = await bolnaService.getAgent(agent.bolnaAgentId)
       const rootPayload = readObject(bolnaAgentResponse)
       const sourcePayload =
@@ -209,6 +304,8 @@ export const agentsController = {
 
   async fetchAll(req: Request, res: Response, next: NextFunction) {
     try {
+      const workspace = await getWorkspaceWithApiKey(req)
+      const bolnaService = createBolnaService(workspace.bolnaApiKey || undefined)
       const bolnaAgents = await bolnaService.getAllAgents()
 
       const ids = bolnaAgents
@@ -221,7 +318,7 @@ export const agentsController = {
       }
 
       const existing = await prisma.agent.findMany({
-        where: { bolnaAgentId: { in: ids } },
+        where: { workspaceId: workspace.id, bolnaAgentId: { in: ids } },
         select: { bolnaAgentId: true },
       })
       const existingIds = new Set(existing.map((agent) => agent.bolnaAgentId).filter(Boolean))
@@ -233,6 +330,7 @@ export const agentsController = {
           if (!bolnaAgentId || existingIds.has(bolnaAgentId)) return null
 
           return {
+            workspaceId: workspace.id,
             bolnaAgentId,
             name: mapped.name || `Imported Agent ${bolnaAgentId.slice(0, 8)}`,
             description: mapped.description || 'Imported from Bolna API',
@@ -267,19 +365,20 @@ export const agentsController = {
 
   async getCalls(req: Request, res: Response, next: NextFunction) {
     try {
+      const workspace = await getWorkspace(req)
       const page = parseInt(req.query.page as string) || 1
       const limit = parseInt(req.query.limit as string) || 20
       const skip = (page - 1) * limit
 
       const [calls, total] = await Promise.all([
         prisma.call.findMany({
-          where: { agentId: req.params.id },
+          where: { agentId: req.params.id, agent: { workspaceId: workspace.id } },
           include: { candidate: true, analytics: true },
           orderBy: { createdAt: 'desc' },
           skip,
           take: limit,
         }),
-        prisma.call.count({ where: { agentId: req.params.id } }),
+        prisma.call.count({ where: { agentId: req.params.id, agent: { workspaceId: workspace.id } } }),
       ])
 
       res.json({ success: true, data: calls, total, page, limit, totalPages: Math.ceil(total / limit) })

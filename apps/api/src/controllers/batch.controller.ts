@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ai-voice-agent/db'
-import { bolnaService } from '../services/bolna.service'
+import { createBolnaService } from '../services/bolna.service'
 import { AppError } from '../middleware/error.middleware'
+import { getWorkspaceWithApiKey } from '../lib/workspace'
 
 function formatRecipientPhone(phone: string, countryCode?: string | null): string {
   const raw = (phone || '').trim()
@@ -23,9 +24,10 @@ function formatRecipientPhone(phone: string, countryCode?: string | null): strin
 export const batchController = {
   async initiateCalls(req: Request, res: Response, next: NextFunction) {
     try {
+      const workspace = await getWorkspaceWithApiKey(req)
       const { candidateIds, agentId } = req.body
 
-      const agent = await prisma.agent.findUnique({ where: { id: agentId } })
+      const agent = await prisma.agent.findFirst({ where: { id: agentId, workspaceId: workspace.id } })
       if (!agent) throw new AppError(404, 'Agent not found')
       if (!agent.bolnaAgentId) throw new AppError(400, 'Agent is not synced with Bolna. Please sync first.')
 
@@ -35,6 +37,7 @@ export const batchController = {
 
       if (candidates.length === 0) throw new AppError(404, 'No candidates found')
 
+      const bolnaService = createBolnaService(workspace.bolnaApiKey || undefined)
       const results = { total: candidates.length, initiated: 0, failed: 0, callIds: [] as string[] }
 
       // Process candidates with a delay to avoid rate limiting
@@ -58,7 +61,7 @@ export const batchController = {
           })
           try {
             const bolnaRes = await bolnaService.initiateCall({
-              agent_id: agent.bolnaAgentId!,
+              agent_id: agent.bolnaAgentId,
               recipient_phone_number: recipientPhone,
               recipient_data: { name: candidate.name, timezone: candidate.timezone },
             })

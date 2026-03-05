@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios'
 import { env } from '../config/env'
+import { AppError } from '../middleware/error.middleware'
 import type {
   BolnaAgentCreatePayload,
   BolnaAgentResponse,
@@ -10,11 +11,11 @@ import type {
 class BolnaService {
   private client: AxiosInstance
 
-  constructor() {
+  constructor(apiKey: string) {
     this.client = axios.create({
       baseURL: env.BOLNA_BASE_URL,
       headers: {
-        Authorization: `Bearer ${env.BOLNA_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
@@ -55,7 +56,6 @@ class BolnaService {
   }
 
   async initiateCall(payload: BolnaCallInitiatePayload): Promise<BolnaCallInitiateResponse> {
-    console.log('payload', payload)
     const response = await this.client.post<BolnaCallInitiateResponse>('/call', payload)
     return response.data
   }
@@ -67,48 +67,53 @@ class BolnaService {
 
   async getExecution(executionId: string): Promise<Record<string, unknown>> {
     const response = await this.client.get(`/executions/${executionId}`)
-    console.log('response.data', response.data)
     return response.data
-  }
-
-  buildAgentPayload(
-    name: string,
-    prompt: string,
-    webhookUrl: string,
-    voice: string,
-    model: string
-  ): BolnaAgentCreatePayload {
-    return {
-      agent_config: {
-        agent_name: name,
-        agent_welcome_message: 'Hello from Bolna',
-        webhook_url: webhookUrl,
-        tasks: [
-          {
-            task_type: 'conversation',
-            toolchain: {
-              execution: 'parallel',
-              pipelines: [
-                {
-                  model: model,
-                  provider: 'openai',
-                },
-              ],
-            },
-            task_config: {
-              agent_welcome_message: 'Hello from Bolna',
-              system_prompt: prompt,
-            },
-          },
-        ],
-        agent_prompts: {
-          task_1: {
-            system_prompt: prompt,
-          },
-        },
-      },
-    }
   }
 }
 
-export const bolnaService = new BolnaService()
+export function createBolnaService(apiKey?: string) {
+  const finalApiKey = apiKey || env.BOLNA_API_KEY
+  if (!finalApiKey) {
+    throw new AppError(400, 'No Bolna API key configured for this workspace. Add it in Agents > API Key tab.')
+  }
+  return new BolnaService(finalApiKey)
+}
+
+export function buildAgentPayload(
+  name: string,
+  prompt: string,
+  webhookUrl: string,
+  voice: string,
+  model: string
+): BolnaAgentCreatePayload {
+  return {
+    agent_config: {
+      agent_name: name,
+      agent_welcome_message: 'Hello from Bolna',
+      webhook_url: webhookUrl,
+      tasks: [
+        {
+          task_type: 'conversation',
+          toolchain: {
+            execution: 'parallel',
+            pipelines: [
+              {
+                model,
+                provider: 'openai',
+              },
+            ],
+          },
+          task_config: {
+            agent_welcome_message: 'Hello from Bolna',
+            system_prompt: prompt,
+          },
+        },
+      ],
+      agent_prompts: {
+        task_1: {
+          system_prompt: prompt,
+        },
+      },
+    },
+  }
+}

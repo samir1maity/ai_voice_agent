@@ -2,16 +2,6 @@
 
 import { useQuery } from '@tanstack/react-query'
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts'
-import {
   Phone,
   Users,
   Clock,
@@ -33,11 +23,6 @@ interface DashboardData {
     activeAgents: number
     totalCandidates: number
   }
-  funnel: {
-    pending: number
-    called: number
-    noAnswer: number
-  }
   recentCalls: Array<{
     id: string
     candidateName: string
@@ -45,7 +30,6 @@ interface DashboardData {
     duration: number | null
     initiatedAt: string
   }>
-  techStackFrequency: Array<{ tech: string; count: number }>
 }
 
 function StatCard({
@@ -107,18 +91,6 @@ function formatDate(iso: string): string {
   })
 }
 
-const PIPELINE_COLORS: Record<string, string> = {
-  pending: '#9ca3af',
-  called: '#a855f7',
-  noAnswer: '#f59e0b',
-}
-
-const PIPELINE_LABELS: Record<string, string> = {
-  pending: 'Pending',
-  called: 'Called',
-  noAnswer: 'No Answer',
-}
-
 export default function DashboardPage() {
   const { data, isLoading, error } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
@@ -127,15 +99,6 @@ export default function DashboardPage() {
 
   const metrics = data?.metrics
 
-  const pipelineData = data?.funnel
-    ? Object.entries(data.funnel).map(([key, count]) => ({
-        name: PIPELINE_LABELS[key] ?? key,
-        count,
-        key,
-      }))
-    : []
-
-  const techData = data?.techStackFrequency ?? []
   const recentCalls = data?.recentCalls ?? []
 
   return (

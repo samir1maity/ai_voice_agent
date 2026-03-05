@@ -5,12 +5,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
   Plus,
-  Upload,
   Search,
   ChevronLeft,
   ChevronRight,
   Users,
-  Phone,
 } from 'lucide-react'
 import { DashboardLayout } from '@/app/dashboard-layout'
 import { Button } from '@/components/ui/button'
@@ -35,7 +33,7 @@ import { CandidateStatusBadge } from '@/components/shared/StatusBadge'
 import { CallButton } from '@/components/calls/CallButton'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
-import { batchApi, candidatesApi, getErrorMessage } from '@/lib/api-client'
+import { candidatesApi, getErrorMessage } from '@/lib/api-client'
 import { toast } from '@/hooks/use-toast'
 
 interface Candidate {
@@ -94,7 +92,6 @@ export default function CandidatesPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('ALL')
   const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pendingStatusChange, setPendingStatusChange] = useState<{
     candidateId: string
     candidateName: string
@@ -113,25 +110,6 @@ export default function CandidatesPage() {
     placeholderData: (prev) => prev,
   })
 
-  const batchMutation = useMutation({
-    mutationFn: (agentId: string) =>
-      batchApi.initiateCalls({
-        candidateIds: Array.from(selected),
-        agentId,
-      }),
-    onSuccess: (result) => {
-      toast({
-        title: 'Batch calls initiated',
-        description: `${result?.initiated ?? selected.size} calls started.`,
-      })
-      setSelected(new Set())
-      queryClient.invalidateQueries({ queryKey: ['candidates'] })
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Batch failed', description: err.message, variant: 'destructive' })
-    },
-  })
-
   const manualStatusMutation = useMutation({
     mutationFn: ({ candidateId, status }: { candidateId: string; status: ManualCandidateStatus }) =>
       candidatesApi.update(candidateId, { status }),
@@ -147,23 +125,6 @@ export default function CandidatesPage() {
 
   const candidates = data?.data ?? []
   const meta = data?.meta
-
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const toggleAll = () => {
-    if (selected.size === candidates.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(candidates.map((c) => c.id)))
-    }
-  }
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value)
@@ -236,28 +197,6 @@ export default function CandidatesPage() {
           </Select>
         </div>
 
-        {/* Bulk Action Bar */}
-        {selected.size > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-            <span className="text-sm font-medium text-blue-700">
-              {selected.size} selected
-            </span>
-            <Link href="/batch">
-              <Button size="sm" className="gap-1.5">
-                <Phone className="h-3.5 w-3.5" />
-                Batch Call
-              </Button>
-            </Link>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setSelected(new Set())}
-            >
-              Clear
-            </Button>
-          </div>
-        )}
-
         {/* Table */}
         <Card>
           <CardContent className="p-0">
@@ -292,14 +231,6 @@ export default function CandidatesPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50 text-left">
-                      <th className="w-10 px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selected.size === candidates.length && candidates.length > 0}
-                          onChange={toggleAll}
-                          className="rounded border-gray-300"
-                        />
-                      </th>
                       <th className="px-4 py-3 font-medium text-gray-500">Name</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
                       <th className="px-4 py-3 font-medium text-gray-500">Current Role</th>
@@ -319,14 +250,6 @@ export default function CandidatesPage() {
 
                         return (
                           <tr key={candidate.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <input
-                                type="checkbox"
-                                checked={selected.has(candidate.id)}
-                                onChange={() => toggleSelect(candidate.id)}
-                                className="rounded border-gray-300"
-                              />
-                            </td>
                             <td className="px-4 py-3">
                               <Link
                                 href={`/candidates/${candidate.id}`}

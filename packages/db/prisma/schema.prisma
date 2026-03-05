@@ -37,9 +37,10 @@ enum AgentStatus {
 
 model Agent {
   id           String      @id @default(cuid())
+  workspaceId  String
   name         String
   description  String?
-  bolnaAgentId String?     @unique
+  bolnaAgentId String?
   status       AgentStatus @default(SYNCING)
   prompt       String      @db.Text
   voice        String      @default("FaqthkZu1EWxXxUFbAfb")
@@ -48,9 +49,24 @@ model Agent {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
   calls Call[]
 
+  @@unique([workspaceId, bolnaAgentId])
+  @@index([workspaceId])
   @@map("agents")
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  bolnaApiKey String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agents Agent[]
+
+  @@map("workspaces")
 }
 
 model Candidate {

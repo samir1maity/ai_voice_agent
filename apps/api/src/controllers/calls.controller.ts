@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ai-voice-agent/db'
-import { bolnaService } from '../services/bolna.service'
+import { createBolnaService } from '../services/bolna.service'
 import { AppError } from '../middleware/error.middleware'
 import { screeningService } from '../services/screening.service'
+import { getWorkspace } from '../lib/workspace'
 
 function formatRecipientPhone(phone: string, countryCode?: string | null): string {
   const raw = (phone || '').trim()
@@ -24,12 +25,15 @@ function formatRecipientPhone(phone: string, countryCode?: string | null): strin
 export const callsController = {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
+      const workspace = await getWorkspace(req)
       const page = parseInt(req.query.page as string) || 1
       const limit = parseInt(req.query.limit as string) || 20
       const skip = (page - 1) * limit
       const { status, candidateId, agentId } = req.query
 
-      const where: Record<string, unknown> = {}
+      const where: Record<string, unknown> = {
+        agent: { workspaceId: workspace.id },
+      }
       if (status) where.status = status
       if (candidateId) where.candidateId = candidateId
       if (agentId) where.agentId = agentId
@@ -56,8 +60,9 @@ export const callsController = {
 
   async get(req: Request, res: Response, next: NextFunction) {
     try {
-      const call = await prisma.call.findUnique({
-        where: { id: req.params.id },
+      const workspace = await getWorkspace(req)
+      const call = await prisma.call.findFirst({
+        where: { id: req.params.id, agent: { workspaceId: workspace.id } },
         include: {
           candidate: true,
           agent: { select: { id: true, name: true, voice: true } },
@@ -73,16 +78,19 @@ export const callsController = {
 
   async initiate(req: Request, res: Response, next: NextFunction) {
     try {
+      const workspace = await getWorkspace(req)
       const { candidateId, agentId } = req.body
 
       const [candidate, agent] = await Promise.all([
         prisma.candidate.findUnique({ where: { id: candidateId } }),
-        prisma.agent.findUnique({ where: { id: agentId } }),
+        prisma.agent.findFirst({ where: { id: agentId, workspaceId: workspace.id } }),
       ])
 
       if (!candidate) throw new AppError(404, 'Candidate not found')
       if (!agent) throw new AppError(404, 'Agent not found')
       if (!agent.bolnaAgentId) throw new AppError(400, 'Agent is not synced with Bolna. Please sync the agent first.')
+      if (!workspace.bolnaApiKey) throw new AppError(400, 'Bolna API key not set. Add it in Agents > API Key tab.')
+
       const recipientPhone = formatRecipientPhone(candidate.phone, candidate.countryCode)
 
       const call = await prisma.call.create({
@@ -101,6 +109,7 @@ export const callsController = {
         data: { status: 'PENDING' },
       })
 
+      const bolnaService = createBolnaService(workspace.bolnaApiKey)
       try {
         const bolnaRes = await bolnaService.initiateCall({
           agent_id: agent.bolnaAgentId,
@@ -134,14 +143,26 @@ export const callsController = {
 
   async getStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const call = await prisma.call.findUnique({
-        where: { id: req.params.id },
-        select: { id: true, status: true, bolnaExecutionId: true, duration: true, completedAt: true },
+      const workspace = await getWorkspace(req)
+      const call = await prisma.call.findFirst({
+        where: { id: req.params.id, agent: { workspaceId: workspace.id } },
+        select: {
+          id: true,
+          status: true,
+          bolnaExecutionId: true,
+          duration: true,
+          completedAt: true,
+          candidateId: true,
+          transcript: true,
+          summary: true,
+          agent: { select: { workspaceId: true } },
+        },
       })
       if (!call) throw new AppError(404, 'Call not found')
 
-      if (call.bolnaExecutionId) {
+      if (call.bolnaExecutionId && workspace.bolnaApiKey) {
         try {
+          const bolnaService = createBolnaService(workspace.bolnaApiKey)
           const bolnaData = await bolnaService.getExecution(call.bolnaExecutionId)
           const bolnaStatus = (bolnaData.status as string)?.toLowerCase()
 
@@ -256,8 +277,9 @@ export const callsController = {
 
   async getTranscript(req: Request, res: Response, next: NextFunction) {
     try {
-      const call = await prisma.call.findUnique({
-        where: { id: req.params.id },
+      const workspace = await getWorkspace(req)
+      const call = await prisma.call.findFirst({
+        where: { id: req.params.id, agent: { workspaceId: workspace.id } },
         select: { transcript: true, summary: true, status: true },
       })
       if (!call) throw new AppError(404, 'Call not found')
@@ -267,5 +289,4 @@ export const callsController = {
       next(err)
     }
   },
-
 }
